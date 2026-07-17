@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CNHR–MNHR Dashboard — 2-8 Mar 2026</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#020617;color:#e2e8f0;font-family:-apple-system,system-ui,'Segoe UI',Roboto,monospace;padding:16px}
+.wrap{max-width:1200px;margin:0 auto}
+h1{font-size:22px;font-weight:800;color:#f8fafc;letter-spacing:-0.5px}
+h1 span{color:#3b82f6}
+.sub{color:#64748b;font-size:11px;margin-top:4px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:16px 0}
+.stat{background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:12px;text-align:center}
+.stat-label{color:#64748b;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:1px}
+.stat-val{font-size:22px;font-weight:800;margin-top:4px}
+.stat-sub{font-size:10px;color:#64748b;margin-top:2px}
+.cards{display:flex;gap:8px;overflow-x:auto;padding:8px 0;-webkit-overflow-scrolling:touch}
+.card{flex-shrink:0;min-width:150px;background:#0f172a;border:2px solid #1e293b;border-radius:10px;padding:10px 12px;cursor:pointer;transition:border-color 0.2s}
+.card.active{background:#1e293b}
+.card-label{font-size:12px;font-weight:700;color:#f8fafc}
+.card-phase{display:inline-block;padding:2px 7px;border-radius:4px;font-size:9px;font-weight:700;margin:4px 0}
+.card-earn{font-size:18px;font-weight:800;color:#f8fafc}
+.card-meta{font-size:10px;color:#94a3b8;margin-top:2px}
+.card-rn{font-size:12px;font-weight:700;margin-top:3px}
+.card-inf{font-size:9px;color:#64748b;margin-top:3px}
+.panel{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:16px;margin-top:16px}
+.panel-hdr{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.panel-title{font-size:18px;font-weight:800;color:#f8fafc}
+.panel-sub{font-size:11px;color:#64748b;margin-top:2px}
+.btns{display:flex;gap:5px;flex-wrap:wrap}
+.btn{background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;padding:5px 10px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn.active{background:#1e40af;color:#f8fafc}
+.chart-box{position:relative;width:100%;overflow:hidden}
+svg.chart{width:100%;display:block;overflow:visible}
+.inf-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+@media(max-width:600px){.inf-grid{grid-template-columns:1fr}}
+.inf-box{border-radius:10px;padding:14px}
+.inf-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.inf-big{font-size:22px;font-weight:800;color:#f8fafc}
+.inf-meta{font-size:11px;color:#94a3b8;margin-top:3px}
+.inf-small{font-size:10px;color:#64748b;margin-top:4px}
+.tbl-wrap{margin-top:14px;max-height:400px;overflow-y:auto;border-radius:8px;border:1px solid #1e293b}
+table{width:100%;border-collapse:collapse;font-size:10px}
+th{padding:5px 5px;text-align:left;color:#94a3b8;font-weight:600;background:#1e293b;position:sticky;top:0;border-bottom:1px solid #334155}
+td{padding:3px 5px}
+tr:nth-child(even){background:#0a0f1a}
+tr:nth-child(odd){background:#0f172a}
+tr.be-row{background:rgba(34,197,94,0.12)!important}
+tr.tgt-row{background:rgba(168,85,247,0.12)!important}
+tr.map-clickable{cursor:pointer}
+tr.map-clickable:hover{background:#1e293b!important}
+.phase-badge{padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600}
+.foot{text-align:center;color:#334155;font-size:9px;margin-top:20px}
+.ov-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:700px){.ov-grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(3,1fr)}}
+.ov-title{color:#94a3b8;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.tooltip{position:absolute;background:#1a1a2e;border:1px solid #334155;border-radius:8px;padding:8px 12px;font-size:11px;color:#e2e8f0;pointer-events:none;z-index:10;display:none;max-width:300px;white-space:nowrap}
+.note-box{background:#0c1425;border:1px solid #1e3a5f;border-left:3px solid #3b82f6;border-radius:8px;padding:10px 14px;margin:10px 0 6px 0;font-size:11px;color:#94a3b8;line-height:1.5}
+.note-box strong{color:#60a5fa;font-weight:700}
+.glossary{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:16px;margin-top:16px}
+.glossary-title{font-size:13px;font-weight:800;color:#f8fafc;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}
+.glossary-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+@media(max-width:700px){.glossary-grid{grid-template-columns:1fr}}
+.gl-item{display:flex;gap:8px;padding:6px 10px;border-bottom:1px solid #1e293b0a}
+.gl-item:nth-child(4n+1),.gl-item:nth-child(4n+2){background:#0a0f1a}
+@media(max-width:700px){.gl-item:nth-child(4n+1),.gl-item:nth-child(4n+2){background:transparent}.gl-item:nth-child(odd){background:#0a0f1a}}
+.gl-term{color:#f59e0b;font-size:11px;font-weight:700;min-width:90px;flex-shrink:0;font-family:monospace}
+.gl-def{color:#94a3b8;font-size:10px;line-height:1.4}
+.conclusion{background:linear-gradient(135deg,#0f172a 0%,#1a1035 100%);border:1px solid #334155;border-radius:12px;padding:20px;margin-top:20px}
+.conclusion-title{font-size:16px;font-weight:800;color:#f8fafc;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.conclusion-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:14px 0}
+.conclusion-card{background:#020617;border:1px solid #1e293b;border-radius:10px;padding:12px;text-align:center}
+.cc-label{font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+.cc-val{font-size:20px;font-weight:800;margin-top:4px}
+.cc-sub{font-size:10px;color:#64748b;margin-top:2px}
+.conclusion-text{font-size:11px;color:#94a3b8;line-height:1.6;margin-top:12px;padding-top:12px;border-top:1px solid #1e293b}
+.conclusion-text strong{color:#e2e8f0}
+.conclusion-bullet{margin:6px 0 6px 12px;padding-left:8px;border-left:2px solid #334155}
+.amgm-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+@media(max-width:600px){.amgm-grid{grid-template-columns:1fr}}
+.amgm-box{background:linear-gradient(135deg,#0c1425,#0f172a);border:1px solid #1e3a5f;border-radius:10px;padding:14px}
+.amgm-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#60a5fa;margin-bottom:8px}
+.amgm-big{font-size:22px;font-weight:800;color:#f8fafc}
+.amgm-sub{font-size:11px;color:#94a3b8;margin-top:3px}
+.amgm-gap{font-size:10px;margin-top:5px;padding:3px 8px;border-radius:4px;display:inline-block}
+.insights-wrap{margin-top:14px}
+.insights-toggle{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:10px 14px;background:#0a0f1a;border:1px solid #1e293b;border-radius:10px;user-select:none;-webkit-user-select:none}
+.insights-body{background:#0a0f1a;border:1px solid #1e293b;border-top:none;border-radius:0 0 10px 10px;padding:14px 16px;display:none}
+.insight-day{margin-bottom:12px}
+.insight-day-hdr{font-size:11px;font-weight:700;color:#f8fafc;padding:4px 0;border-bottom:1px solid #1e293b80;margin-bottom:6px}
+.insight-trip{font-size:10.5px;color:#94a3b8;line-height:1.6;padding:3px 0 3px 12px;border-left:2px solid transparent}
+.insight-trip.phase-deficit{border-left-color:#dc2626}
+.insight-trip.phase-recovery{border-left-color:#d97706}
+.insight-trip.phase-target{border-left-color:#059669}
+.insight-trip .trip-num{color:#64748b;font-weight:600;font-size:10px}
+.insight-trip .insight-metric{color:#e2e8f0;font-weight:600}
+.insight-trip .insight-state{font-weight:700;font-size:10px;padding:1px 5px;border-radius:3px}
+/* === ROUTE MAP (collapsible panel) === */
+.map-toggle{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:10px 14px;background:#0a0f1a;border:1px solid #1e293b;border-radius:10px;user-select:none;-webkit-user-select:none;margin-top:14px}
+.map-body{background:#0a0f1a;border:1px solid #1e293b;border-top:none;border-radius:0 0 10px 10px;padding:14px 16px;display:none}
+.map-container{position:relative;width:100%;height:400px;border-radius:8px;overflow:hidden;border:1px solid #1e293b}
+#week-map{width:100%;height:100%;background:#0f172a}
+tr.map-selected{background:#1e293b!important;outline:1px solid #3b82f6}
+.map-color-btns{position:absolute;top:8px;right:8px;z-index:1000;display:flex;gap:3px;flex-wrap:wrap}
+.map-color-btn{background:rgba(15,23,42,0.85);color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:3px 7px;font-size:9px;font-weight:600;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)}
+.map-color-btn.active{background:#1e40af;color:#f8fafc;border-color:#3b82f6}
+.map-legend{position:absolute;bottom:8px;right:8px;z-index:1000;background:rgba(15,23,42,0.85);border:1px solid #334155;border-radius:6px;padding:6px 10px;font-size:10px;backdrop-filter:blur(4px)}
+.map-legend-row{display:flex;align-items:center;gap:6px;margin:2px 0}
+.map-legend-line{width:16px;height:3px;display:inline-block;border-radius:2px}
+.map-show-all-btn{position:absolute;bottom:8px;left:8px;z-index:1000;padding:5px 12px;background:rgba(15,63,96,0.9);color:#f8fafc;border:1px solid #334155;border-radius:6px;cursor:pointer;font-size:10px;font-weight:600;font-family:inherit;backdrop-filter:blur(4px)}
+.map-show-all-btn:hover{background:#1e40af}
+@media(max-width:700px){
+  .map-color-btns{top:4px;right:4px}
+  .map-container{height:350px}
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+var W=[{"label":"2-8 Mar 2026","key":"2026-03-02","total_n":26,"total_e":293.47,"total_h":10.56,"total_mi":157.3,"final_rho":27.79,"final_r_n":-12.93,"be_trip":null,"target_trip":null,"stmt_total":341.78,"nlw_hours":null,"cost_rate":40.72,"final_mnhr_ema":5.81,"final_state":"ACCEL_REC","am_rho_paid":30.29,"gm_rho_paid":29.75,"ag_gap_paid":0.54,"am_mnhr_paid":8.84,"gm_mnhr_paid":8.3,"mean_util":0.8077,"trips":[{"n":1,"dt":"2026-03-03 00:14","day":"Tue","time":"00:14","t_earn":17.71,"t_dur":0.596111,"t_rho":29.71,"cum_e":17.71,"cum_h":0.5961,"rho":29.71,"r_n":-691.63,"deficit":-412.29,"recovery":4.1,"service":"ELECTRIC","pickup":"Reigate Rd., Bromley, BR1 5HT","dropoff":"35 Hatfield Mead, Morden, SM4 5PF","mnhr":8.26,"mnhr_ema":8.26,"state":"ACCEL_REC","pax":"Pauline","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"fuzzy","rho_paid":29.71,"rho_true":23.18,"mnhr_paid":8.26,"mnhr_true":1.73,"mnhr_true_ema":1.73,"util":0.7801,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":4.1,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":2,"dt":"2026-03-03 01:33","day":"Tue","time":"01:33","t_earn":6.89,"t_dur":0.238333,"t_rho":28.91,"cum_e":24.6,"cum_h":0.8344,"rho":29.48,"r_n":-485.83,"deficit":-405.4,"recovery":5.7,"service":"ELECTRIC","pickup":"27 Westleigh Avenue, London, SW15 6","dropoff":"Wolfe House, London, W14 8QA","mnhr":7.46,"mnhr_ema":8.14,"state":"ACCEL_REC","pax":"Judy","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"fuzzy","rho_paid":28.91,"rho_true":21.44,"mnhr_paid":7.46,"mnhr_true":-0.01,"mnhr_true_ema":1.47,"util":0.7416,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":5.7,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":3,"dt":"2026-03-03 01:58","day":"Tue","time":"01:58","t_earn":17.08,"t_dur":0.633056,"t_rho":26.98,"cum_e":41.68,"cum_h":1.4675,"rho":28.4,"r_n":-264.61,"deficit":-388.32,"recovery":9.7,"service":"UBERX","pickup":"65 Holland Road, London, W14 8HL","dropoff":"79 Tenterden Road, London, N17 8BW","mnhr":5.53,"mnhr_ema":7.75,"state":"ACCEL_REC","pax":"Tulgaa","card":"MATCH","stk":false,"portal_matched":true,"match_type":"fuzzy","rho_paid":26.98,"rho_true":24.56,"mnhr_paid":5.53,"mnhr_true":3.11,"mnhr_true_ema":1.71,"util":0.9101,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":9.7,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":4,"dt":"2026-03-03 13:07","day":"Tue","time":"13:07","t_earn":4.86,"t_dur":0.145833,"t_rho":33.33,"cum_e":46.54,"cum_h":1.6133,"rho":28.85,"r_n":-237.68,"deficit":-383.46,"recovery":10.8,"service":"ELECTRIC","pickup":"124 Earlham Grove, London, E7 9AS","dropoff":"Ambica Jewellers, London, E7 8LF","mnhr":11.88,"mnhr_ema":8.37,"state":"ACCEL_REC","pax":"Sabina","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"exact","rho_paid":33.33,"rho_true":21.21,"mnhr_paid":11.88,"mnhr_true":-0.24,"mnhr_true_ema":1.42,"util":0.6364,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":10.8,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":5,"dt":"2026-03-03 13:21","day":"Tue","time":"13:21","t_earn":5.46,"t_dur":0.211944,"t_rho":25.76,"cum_e":52.0,"cum_h":1.8253,"rho":28.49,"r_n":-207.09,"deficit":-378.0,"recovery":12.1,"service":"ELECTRIC","pickup":"United Halal Meat, London, E7 8LJ","dropoff":"53 Warwick Road, London, E15 4JZ","mnhr":4.32,"mnhr_ema":7.76,"state":"ACCEL_REC","pax":"Zeeshan","card":"EXCLUSIVE","stk":true,"portal_matched":true,"match_type":"fuzzy","rho_paid":25.76,"rho_true":23.1,"mnhr_paid":4.32,"mnhr_true":1.65,"mnhr_true_ema":1.46,"util":0.8966,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":12.1,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":6,"dt":"2026-03-03 13:36","day":"Tue","time":"13:36","t_earn":5.14,"t_dur":0.209167,"t_rho":24.57,"cum_e":57.14,"cum_h":2.0344,"rho":28.09,"r_n":-183.27,"deficit":-372.86,"recovery":13.3,"service":"ELECTRIC","pickup":"258-262 Romford Rd, London, E7 9HZ","dropoff":"MicroTax Accountants Limited, Londo","mnhr":3.13,"mnhr_ema":7.07,"state":"ACCEL_REC","pax":"Ataullah","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"exact","rho_paid":24.57,"rho_true":19.96,"mnhr_paid":3.13,"mnhr_true":-1.49,"mnhr_true_ema":1.01,"util":0.8123,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":13.3,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":7,"dt":"2026-03-03 13:52","day":"Tue","time":"13:52","t_earn":6.22,"t_dur":0.213056,"t_rho":29.19,"cum_e":63.36,"cum_h":2.2475,"rho":28.19,"r_n":-163.13,"deficit":-366.64,"recovery":14.7,"service":"ELECTRIC","pickup":"Mary St, London, E16 1EN","dropoff":"9 Merchant Street, London, E3 4LT","mnhr":7.75,"mnhr_ema":7.17,"state":"ACCEL_REC","pax":"Hannah","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"fuzzy","rho_paid":29.19,"rho_true":24.82,"mnhr_paid":7.75,"mnhr_true":3.38,"mnhr_true_ema":1.37,"util":0.8503,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":14.7,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":8,"dt":"2026-03-03 14:07","day":"Tue","time":"14:07","t_earn":14.03,"t_dur":0.613333,"t_rho":22.88,"cum_e":77.39,"cum_h":2.8608,"rho":27.05,"r_n":-123.25,"deficit":-352.61,"recovery":18.0,"service":"UBERX","pickup":"Mile End Rd, London, E3 4PA","dropoff":"Brook Drive, London, SE11 6NL","mnhr":1.43,"mnhr_ema":6.31,"state":"ACCEL_REC","pax":"Nazhrat","card":"MATCH","stk":false,"portal_matched":true,"match_type":"exact","rho_paid":22.88,"rho_true":19.61,"mnhr_paid":1.43,"mnhr_true":-1.84,"mnhr_true_ema":0.89,"util":0.8571,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":18.0,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":9,"dt":"2026-03-03 14:52","day":"Tue","time":"14:52","t_earn":14.9,"t_dur":0.464444,"t_rho":32.08,"cum_e":92.29,"cum_h":3.3253,"rho":27.75,"r_n":-101.56,"deficit":-337.71,"recovery":21.5,"service":"COMFORT","pickup":"Vanguard School, London, SE11 6QH","dropoff":"47 Shrubbery Rd, London, SW16 2AS","mnhr":10.63,"mnhr_ema":6.96,"state":"ACCEL_REC","pax":"Teresa","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"exact","rho_paid":32.08,"rho_true":29.95,"mnhr_paid":10.63,"mnhr_true":8.5,"mnhr_true_ema":2.03,"util":0.9336,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":21.5,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":10,"dt":"2026-03-03 15:35","day":"Tue","time":"15:35","t_earn":6.59,"t_dur":0.194167,"t_rho":33.94,"cum_e":98.88,"cum_h":3.5194,"rho":28.1,"r_n":-94.08,"deficit":-331.12,"recovery":23.0,"service":"UBERX","pickup":"S Oak Rd, London, SW16 2UD","dropoff":"Stockport Rd, London, SW16 5XE","mnhr":12.49,"mnhr_ema":7.79,"state":"ACCEL_REC","pax":"Myrtle","card":"EXCLUSIVE","stk":false,"portal_matched":false,"match_type":null,"rho_paid":33.94,"rho_true":19.48,"mnhr_paid":12.49,"mnhr_true":-1.97,"mnhr_true_ema":1.43,"util":0.5739,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":23.0,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":11,"dt":"2026-03-03 16:08","day":"Tue","time":"16:08","t_earn":8.94,"t_dur":0.335,"t_rho":26.69,"cum_e":107.82,"cum_h":3.8544,"rho":27.97,"r_n":-83.59,"deficit":-322.18,"recovery":25.1,"service":"UBERX","pickup":"47-49 High Rd, London, SW16 1PW","dropoff":"118 Strathyre Avenue, London, SW16 ","mnhr":5.24,"mnhr_ema":7.41,"state":"ACCEL_REC","pax":"Korang","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"fuzzy","rho_paid":26.69,"rho_true":20.8,"mnhr_paid":5.24,"mnhr_true":-0.64,"mnhr_true_ema":1.12,"util":0.7796,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":25.1,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":12,"dt":"2026-03-03 16:26","day":"Tue","time":"16:26","t_earn":18.3,"t_dur":0.755278,"t_rho":24.23,"cum_e":126.12,"cum_h":4.6097,"rho":27.36,"r_n":-65.92,"deficit":-303.88,"recovery":29.3,"service":"UBERX","pickup":"70 Bridport Road, Thornton Heath, C","dropoff":"The Brotherhood Games Pok\u00e9mon and Y","mnhr":2.78,"mnhr_ema":6.71,"state":"ACCEL_REC","pax":"Naim","card":"EXCLUSIVE","stk":true,"portal_matched":true,"match_type":"fuzzy","rho_paid":24.23,"rho_true":20.11,"mnhr_paid":2.78,"mnhr_true":-1.34,"mnhr_true_ema":0.75,"util":0.83,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":29.3,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":13,"dt":"2026-03-03 17:12","day":"Tue","time":"17:12","t_earn":13.09,"t_dur":0.431111,"t_rho":30.36,"cum_e":139.21,"cum_h":5.0408,"rho":27.62,"r_n":-57.69,"deficit":-290.79,"recovery":32.4,"service":"ELECTRIC","pickup":"375 Old Kent Road, London, SE1 5JQ","dropoff":"CAMDEN MARKET, London, NW1 8AF","mnhr":8.92,"mnhr_ema":7.04,"state":"ACCEL_REC","pax":"Sophie","card":"EXCLUSIVE","stk":true,"portal_matched":true,"match_type":"fuzzy","rho_paid":30.36,"rho_true":20.54,"mnhr_paid":8.92,"mnhr_true":-0.9,"mnhr_true_ema":0.5,"util":0.6765,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":32.4,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":14,"dt":"2026-03-03 18:11","day":"Tue","time":"18:11","t_earn":6.95,"t_dur":0.263889,"t_rho":26.34,"cum_e":146.16,"cum_h":5.3047,"rho":27.55,"r_n":-53.51,"deficit":-283.84,"recovery":34.0,"service":"ELECTRIC","pickup":"Dinwiddy House, London, N1 9NF","dropoff":"The Stay Club @ Camden, London, NW1","mnhr":4.89,"mnhr_ema":6.72,"state":"ACCEL_REC","pax":"josephine","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"fuzzy","rho_paid":26.34,"rho_true":16.57,"mnhr_paid":4.89,"mnhr_true":-4.88,"mnhr_true_ema":-0.3,"util":0.6291,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":34.0,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":15,"dt":"2026-03-03 19:27","day":"Tue","time":"19:27","t_earn":7.46,"t_dur":0.3675,"t_rho":20.3,"cum_e":153.62,"cum_h":5.6722,"rho":27.08,"r_n":-48.73,"deficit":-276.38,"recovery":35.7,"service":"UBERX","pickup":"Haverstock Hill, London, NW3 4","dropoff":"92 Cromer Street, London, WC1H 8","mnhr":-1.15,"mnhr_ema":5.54,"state":"ACCEL_REC","pax":"Kitty","card":"EXCLUSIVE","stk":false,"portal_matched":false,"match_type":null,"rho_paid":20.3,"rho_true":16.66,"mnhr_paid":-1.15,"mnhr_true":-4.79,"mnhr_true_ema":-0.98,"util":0.8207,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":35.7,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":16,"dt":"2026-03-03 19:54","day":"Tue","time":"19:54","t_earn":32.79,"t_dur":0.884167,"t_rho":37.09,"cum_e":186.41,"cum_h":6.5564,"rho":28.43,"r_n":-37.15,"deficit":-243.59,"recovery":43.4,"service":"UBERX","pickup":"Lansdowne Terrace, London, WC1N 1EH","dropoff":"Arc Court, Romford, RM7 0FH","mnhr":15.64,"mnhr_ema":7.05,"state":"ACCEL_REC","pax":"Dahabo","card":"MATCH","stk":false,"portal_matched":true,"match_type":"exact","rho_paid":37.09,"rho_true":33.17,"mnhr_paid":15.64,"mnhr_true":11.72,"mnhr_true_ema":0.93,"util":0.8944,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":43.4,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":17,"dt":"2026-03-03 21:12","day":"Tue","time":"21:12","t_earn":15.07,"t_dur":0.513611,"t_rho":29.34,"cum_e":201.48,"cum_h":7.07,"rho":28.5,"r_n":-32.32,"deficit":-228.52,"recovery":46.9,"service":"ELECTRIC","pickup":"18 Rise Park Boulevard, Romford, RM","dropoff":"14 Calderon Road, London, E11 4EU","mnhr":7.89,"mnhr_ema":7.18,"state":"ACCEL_REC","pax":"tayiba","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"exact","rho_paid":29.34,"rho_true":25.19,"mnhr_paid":7.89,"mnhr_true":3.74,"mnhr_true_ema":1.35,"util":0.8584,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":46.9,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":18,"dt":"2026-03-03 22:00","day":"Tue","time":"22:00","t_earn":0.0,"t_dur":0.348056,"t_rho":0.0,"cum_e":201.48,"cum_h":7.4181,"rho":27.16,"r_n":-30.81,"deficit":-228.52,"recovery":46.9,"service":"ELECTRIC","pickup":"Leyton High Road Post Office, Londo","dropoff":"St Mary's Rd, London, E10","mnhr":-21.45,"mnhr_ema":2.89,"state":"ACCEL_REC","pax":"Felix","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"exact","rho_paid":0.0,"rho_true":0.0,"mnhr_paid":-21.45,"mnhr_true":-21.45,"mnhr_true_ema":-2.07,"util":0.8695,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":46.9,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":19,"dt":"2026-03-03 22:24","day":"Tue","time":"22:24","t_earn":15.95,"t_dur":0.728889,"t_rho":21.88,"cum_e":217.43,"cum_h":8.1469,"rho":26.69,"r_n":-26.09,"deficit":-212.57,"recovery":50.6,"service":"ELECTRIC","pickup":"The Queens Arms, London, E17 9NJ","dropoff":"Summerston House, London, E16 2PE","mnhr":0.44,"mnhr_ema":2.52,"state":"ACCEL_REC","pax":"Daphne","card":"MATCH","stk":false,"portal_matched":true,"match_type":"exact","rho_paid":21.88,"rho_true":19.09,"mnhr_paid":0.44,"mnhr_true":-2.36,"mnhr_true_ema":-2.11,"util":0.8723,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":50.6,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":20,"dt":"2026-03-07 00:09","day":"Sat","time":"00:09","t_earn":7.48,"t_dur":0.207222,"t_rho":36.1,"cum_e":224.91,"cum_h":8.3542,"rho":26.92,"r_n":-24.55,"deficit":-205.09,"recovery":52.3,"service":"ELECTRIC","pickup":"393 Katherine Road, London, E7 8LT","dropoff":"London, E14 9FX","mnhr":14.65,"mnhr_ema":4.34,"state":"ACCEL_REC","pax":"Abdi Ismail","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"fuzzy","rho_paid":36.1,"rho_true":30.74,"mnhr_paid":14.65,"mnhr_true":9.29,"mnhr_true_ema":-0.4,"util":0.8516,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":52.3,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":21,"dt":"2026-03-07 00:25","day":"Sat","time":"00:25","t_earn":4.71,"t_dur":0.117778,"t_rho":39.99,"cum_e":229.62,"cum_h":8.4719,"rho":27.1,"r_n":-23.65,"deficit":-200.38,"recovery":53.4,"service":"ELECTRIC","pickup":"Marriott Executive Apartments Londo","dropoff":"London, E14 7FX","mnhr":18.54,"mnhr_ema":6.47,"state":"ACCEL_REC","pax":"kayleigh","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"fuzzy","rho_paid":39.99,"rho_true":27.98,"mnhr_paid":18.54,"mnhr_true":6.53,"mnhr_true_ema":0.64,"util":0.6997,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":53.4,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":22,"dt":"2026-03-07 00:36","day":"Sat","time":"00:36","t_earn":16.35,"t_dur":0.391389,"t_rho":41.77,"cum_e":245.97,"cum_h":8.8633,"rho":27.75,"r_n":-20.76,"deficit":-184.03,"recovery":57.2,"service":"COMFORT","pickup":"Knapp Rd, London, E3 4BP","dropoff":"2 King's Grove, London, SE15 2NB","mnhr":20.33,"mnhr_ema":8.55,"state":"ACCEL_REC","pax":"Julian","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"exact","rho_paid":41.77,"rho_true":34.62,"mnhr_paid":20.33,"mnhr_true":13.18,"mnhr_true_ema":2.52,"util":0.8288,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":57.2,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":23,"dt":"2026-03-07 01:18","day":"Sat","time":"01:18","t_earn":15.62,"t_dur":0.496111,"t_rho":31.48,"cum_e":261.59,"cum_h":9.3594,"rho":27.95,"r_n":-17.99,"deficit":-168.41,"recovery":60.8,"service":"UBERX","pickup":"260 Queens Road, London, SE14 5JN","dropoff":"35 Corbiere House, London, N1 5","mnhr":10.04,"mnhr_ema":8.77,"state":"ACCEL_REC","pax":"Ben","card":"EXCLUSIVE","stk":false,"portal_matched":true,"match_type":"exact","rho_paid":31.48,"rho_true":29.56,"mnhr_paid":10.04,"mnhr_true":8.12,"mnhr_true_ema":3.36,"util":0.939,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":60.8,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":24,"dt":"2026-03-07 01:49","day":"Sat","time":"01:49","t_earn":13.99,"t_dur":0.363333,"t_rho":38.5,"cum_e":275.58,"cum_h":9.7228,"rho":28.34,"r_n":-15.88,"deficit":-154.42,"recovery":64.1,"service":"UBERX","pickup":"Seed Library, London, E1 6JQ","dropoff":"10A Brabourn Grove, London, SE15 2B","mnhr":17.06,"mnhr_ema":10.01,"state":"ACCEL_REC","pax":"Delia","card":"EXCLUSIVE","stk":true,"portal_matched":true,"match_type":"fuzzy","rho_paid":38.5,"rho_true":26.55,"mnhr_paid":17.06,"mnhr_true":5.1,"mnhr_true_ema":3.62,"util":0.6895,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":64.1,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":25,"dt":"2026-03-07 02:24","day":"Sat","time":"02:24","t_earn":17.89,"t_dur":0.504444,"t_rho":35.46,"cum_e":293.47,"cum_h":10.2272,"rho":28.7,"r_n":-13.35,"deficit":-136.53,"recovery":68.2,"service":"UBERX","pickup":"The Greyhound, London, SE15 5SE","dropoff":"Lewisham Way, London, SE4 1XF","mnhr":14.02,"mnhr_ema":10.62,"state":"ACCEL_REC","pax":"Daniel","card":"MATCH","stk":false,"portal_matched":true,"match_type":"exact","rho_paid":35.46,"rho_true":27.3,"mnhr_paid":14.02,"mnhr_true":5.86,"mnhr_true_ema":3.96,"util":0.7698,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":68.2,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0},{"n":26,"dt":"2026-03-07 03:09","day":"Sat","time":"03:09","t_earn":0.0,"t_dur":0.333333,"t_rho":0.0,"cum_e":293.47,"cum_h":10.5606,"rho":27.79,"r_n":-12.93,"deficit":-136.53,"recovery":68.2,"service":"ELECTRIC","pickup":"","dropoff":"","mnhr":-21.45,"mnhr_ema":5.81,"state":"ACCEL_REC","pax":"zara","card":"UNKNOWN","stk":false,"portal_matched":false,"match_type":null,"rho_paid":0.0,"rho_true":0.0,"mnhr_paid":-21.45,"mnhr_true":-21.45,"mnhr_true_ema":0.15,"util":1.0,"four_state":"ACCEL_REC","phase":"DEFICIT","recovery_pct":68.2,"has_gps_track":false,"enroute_track":[],"trip_track":[],"pickup_pos":null,"dropoff_pos":null,"offer_pos":null,"enroute_mins":0,"trip_mins":0,"trip_miles":0,"enroute_miles":0,"color":"#FF6B6B","per_hr":0,"per_mile":0}],"match_summary":{"total_trips":26,"exact_matches":11,"fuzzy_matches":12,"unmatched":3,"match_rate_pct":88.5,"avg_earnings_delta":0.72},"map_deadheads":[]}];
+var CW=430.0,RS=15.0,ALPHA=0.15,H_BAR=20.05;
+var LAMBDA_PAID=CW/H_BAR;
+var SC={"SUSTAINED": "#22c55e", "ACCEL_REC": "#059669", "DECEL": "#d97706", "STALLED": "#dc2626"};
+var PC={TARGET:"#059669",RECOVERY:"#d97706",DEFICIT:"#dc2626"};
+var SL={ACCEL_REC:"Accel Recovery",SUSTAINED:"Sustained",DECEL:"Decelerating",STALLED:"Stalled"};
+var selIdx=W.length-1,chartMode="earnings";
+var weekMap=null,mapTripLayers={},mapDeadheadLayers=[],mapColorMode="default",mapSelectedTrip=null;
+
+// Compute w.days for each week (group trips by date)
+(function(){
+  W.forEach(function(w){
+    w.days={};
+    w.trips.forEach(function(t){
+      var dayKey=t.dt?t.dt.split(" ")[0]:"unknown";
+      if(!w.days[dayKey])w.days[dayKey]={trips:[],earn:0,hours:0,n:0};
+      w.days[dayKey].trips.push(t);
+      w.days[dayKey].earn+=t.t_earn;
+      w.days[dayKey].hours+=t.t_dur;
+      w.days[dayKey].n++;
+    });
+  });
+})();
+
+function ph(r){return r>=RS?"TARGET":r>=0?"RECOVERY":"DEFICIT"}
+function m$(v){return Number(v).toFixed(2)}
+function $(s,p){return(p||document).querySelector(s)}
+function $$(s,p){return Array.from((p||document).querySelectorAll(s))}
+function el(tag,attr,children){
+  var e=document.createElement(tag);
+  if(attr)Object.keys(attr).forEach(function(k){
+    if(k==="style"&&typeof attr[k]==="object"){Object.assign(e.style,attr[k])}
+    else if(k==="className")e.className=attr[k];
+    else if(k.indexOf("on")===0)e.addEventListener(k.slice(2).toLowerCase(),attr[k]);
+    else e.setAttribute(k,attr[k]);
+  });
+  if(children!=null){
+    if(Array.isArray(children))children.forEach(function(c){if(c!=null)e.appendChild(typeof c==="string"?document.createTextNode(c):c)});
+    else if(typeof children==="string")e.textContent=children;
+    else e.appendChild(children);
+  }
+  return e;
+}
+
+// === SVG CHART (4 modes: earnings, cnhr, mnhr, tripRate) ===
+function makeSVGChart(week,mode){
+  var trips=week.trips,W2=800,H=260,pad={t:20,r:52,b:30,l:28};
+  var cw=W2-pad.l-pad.r,ch=H-pad.t-pad.b;
+  var n=trips.length;
+  if(n===0)return el("div",{},"No trip data");
+  var ns="http://www.w3.org/2000/svg";
+  var svg=document.createElementNS(ns,"svg");
+  svg.setAttribute("viewBox","0 0 "+W2+" "+H);svg.setAttribute("class","chart");
+  function ln(x1,y1,x2,y2,stroke,dash,sw){
+    var l=document.createElementNS(ns,"line");
+    l.setAttribute("x1",x1);l.setAttribute("y1",y1);l.setAttribute("x2",x2);l.setAttribute("y2",y2);
+    l.setAttribute("stroke",stroke);l.setAttribute("stroke-width",sw||1);
+    if(dash)l.setAttribute("stroke-dasharray",dash);return l;
+  }
+  function txt(x,y,t,fill,size,anchor){
+    var e=document.createElementNS(ns,"text");
+    e.setAttribute("x",x);e.setAttribute("y",y);e.setAttribute("fill",fill||"#64748b");
+    e.setAttribute("font-size",size||10);e.setAttribute("font-family","inherit");
+    if(anchor)e.setAttribute("text-anchor",anchor);e.textContent=t;return e;
+  }
+  function rect(x,y,w,h,fill,opacity){
+    var r=document.createElementNS(ns,"rect");
+    r.setAttribute("x",x);r.setAttribute("y",y);r.setAttribute("width",w);r.setAttribute("height",h);
+    r.setAttribute("fill",fill);r.setAttribute("rx",2);
+    if(opacity)r.setAttribute("fill-opacity",opacity);return r;
+  }
+
+  if(mode==="earnings"){
+    var maxE=Math.max(CW*1.1,trips[n-1].cum_e*1.05);
+    var scX=function(i){return pad.l+(i/(n-1||1))*cw};
+    var scY=function(v){return pad.t+ch-(v/maxE)*ch};
+    for(var g=0;g<=4;g++){var gy=maxE*g/4;svg.appendChild(ln(pad.l,scY(gy),pad.l+cw,scY(gy),"#1e293b","3 3"));svg.appendChild(txt(pad.l-2,scY(gy)+3,"\u00A3"+Math.round(gy),"#64748b",9,"end"));}
+    if(CW<=maxE){svg.appendChild(ln(pad.l,scY(CW),pad.l+cw,scY(CW),"#ef4444","6 3",2));svg.appendChild(txt(pad.l+cw+3,scY(CW)+4,"\u00A3"+CW+" BE","#ef4444",10));}
+    var pts=trips.map(function(t,i){return scX(i)+","+scY(t.cum_e)}).join(" ");
+    var areaPath="M "+scX(0)+","+scY(0)+" L "+pts+" L "+scX(n-1)+","+scY(0)+" Z";
+    var area=document.createElementNS(ns,"path");area.setAttribute("d",areaPath);area.setAttribute("fill","#3b82f6");area.setAttribute("fill-opacity","0.15");svg.appendChild(area);
+    var path=document.createElementNS(ns,"polyline");path.setAttribute("points",pts);path.setAttribute("fill","none");path.setAttribute("stroke","#3b82f6");path.setAttribute("stroke-width","2.5");svg.appendChild(path);
+    if(week.be_trip){var bx=scX(week.be_trip-1);svg.appendChild(ln(bx,pad.t,bx,pad.t+ch,"#22c55e","4 2",2));svg.appendChild(txt(bx,pad.t-4,"\u2605 BE","#22c55e",11,"middle"));}
+    if(week.target_trip){var tx=scX(week.target_trip-1);svg.appendChild(ln(tx,pad.t,tx,pad.t+ch,"#a855f7","4 2",2));svg.appendChild(txt(tx,pad.t-4,"\u2605 r*","#a855f7",11,"middle"));}
+    var step=Math.max(1,Math.floor(n/10));for(var i=0;i<n;i+=step)svg.appendChild(txt(scX(i),H-5,""+(i+1),"#64748b",9,"middle"));
+    svg.appendChild(txt(W2/2,H-1,"Trip #","#64748b",9,"middle"));
+  } else if(mode==="cnhr"){
+    var vals=trips.map(function(t){return t.r_n});
+    var clampedVals=vals.map(function(v){return Math.max(-100,Math.min(80,v))});
+    var minV=Math.min.apply(null,clampedVals.concat([0,-10]));
+    var maxV=Math.max.apply(null,clampedVals.concat([RS+5]));
+    var range=maxV-minV;
+    var scX=function(i){return pad.l+(i/(n-1||1))*cw};
+    var scY=function(v){var c=Math.max(minV,Math.min(maxV,v));return pad.t+ch-((c-minV)/range)*ch};
+    [minV,0,RS,maxV].forEach(function(g){svg.appendChild(ln(pad.l,scY(g),pad.l+cw,scY(g),"#1e293b","3 3"));});
+    svg.appendChild(ln(pad.l,scY(0),pad.l+cw,scY(0),"#ef4444","4 2",1.5));svg.appendChild(txt(pad.l+cw+3,scY(0)+4,"\u00A30","#ef4444",9));
+    svg.appendChild(ln(pad.l,scY(RS),pad.l+cw,scY(RS),"#a855f7","6 3",2));svg.appendChild(txt(pad.l+cw+3,scY(RS)+4,"r*=\u00A3"+RS,"#a855f7",10));
+    var pts2=[];trips.forEach(function(t,i){pts2.push(scX(i)+","+scY(t.r_n))});
+    var p2=document.createElementNS(ns,"polyline");p2.setAttribute("points",pts2.join(" "));p2.setAttribute("fill","none");p2.setAttribute("stroke","#f59e0b");p2.setAttribute("stroke-width","2.5");svg.appendChild(p2);
+    var pts3=[];trips.forEach(function(t,i){pts3.push(scX(i)+","+scY(Math.min(maxV,t.rho)))});
+    var p3=document.createElementNS(ns,"polyline");p3.setAttribute("points",pts3.join(" "));p3.setAttribute("fill","none");p3.setAttribute("stroke","#06b6d4");p3.setAttribute("stroke-width","1.5");p3.setAttribute("stroke-dasharray","4 2");svg.appendChild(p3);
+    [minV,0,RS,maxV].forEach(function(v){svg.appendChild(txt(pad.l-2,scY(v)+3,"\u00A3"+Math.round(v),"#64748b",9,"end"));});
+    if(week.be_trip){var bx=scX(week.be_trip-1);svg.appendChild(ln(bx,pad.t,bx,pad.t+ch,"#22c55e","4 2",2));svg.appendChild(txt(bx,pad.t-4,"\u2605 BE","#22c55e",11,"middle"));}
+    if(week.target_trip){var tx=scX(week.target_trip-1);svg.appendChild(ln(tx,pad.t,tx,pad.t+ch,"#a855f7","4 2",2));svg.appendChild(txt(tx,pad.t-4,"\u2605 r*","#a855f7",11,"middle"));}
+    var step=Math.max(1,Math.floor(n/10));for(var i=0;i<n;i+=step)svg.appendChild(txt(scX(i),H-5,""+(i+1),"#64748b",9,"middle"));
+    svg.appendChild(ln(pad.l+10,pad.t+8,pad.l+30,pad.t+8,"#f59e0b",null,2.5));svg.appendChild(txt(pad.l+33,pad.t+12,"CNHR r\u2099","#f59e0b",9));
+    svg.appendChild(ln(pad.l+100,pad.t+8,pad.l+120,pad.t+8,"#06b6d4","4 2",1.5));svg.appendChild(txt(pad.l+123,pad.t+12,"Gross \u03C1","#06b6d4",9));
+  } else if(mode==="mnhr"){
+    var allVals=[];trips.forEach(function(t){allVals.push(t.r_n,t.mnhr,t.mnhr_ema)});
+    var clampedAll=allVals.map(function(v){return Math.max(-80,Math.min(80,v))});
+    var minV=Math.min.apply(null,clampedAll.concat([0,-10]));
+    var maxV=Math.max.apply(null,clampedAll.concat([RS+5]));
+    var range=maxV-minV;
+    var scX=function(i){return pad.l+(i/(n-1||1))*cw};
+    var scY=function(v){var c=Math.max(minV,Math.min(maxV,v));return pad.t+ch-((c-minV)/range)*ch};
+    for(var si=0;si<n;si++){var x0=si===0?pad.l:(scX(si-1)+scX(si))/2;var x1=si===n-1?pad.l+cw:(scX(si)+scX(si+1))/2;var bandR=document.createElementNS(ns,"rect");bandR.setAttribute("x",x0);bandR.setAttribute("y",pad.t);bandR.setAttribute("width",x1-x0);bandR.setAttribute("height",ch);bandR.setAttribute("fill",SC[trips[si].state]||"#334155");bandR.setAttribute("fill-opacity","0.06");svg.appendChild(bandR);}
+    [minV,0,RS,maxV].forEach(function(g){svg.appendChild(ln(pad.l,scY(g),pad.l+cw,scY(g),"#1e293b","3 3"));});
+    svg.appendChild(ln(pad.l,scY(0),pad.l+cw,scY(0),"#ef4444","4 2",1.5));svg.appendChild(txt(pad.l+cw+3,scY(0)+4,"\u00A30","#ef4444",9));
+    svg.appendChild(ln(pad.l,scY(RS),pad.l+cw,scY(RS),"#a855f7","6 3",2));svg.appendChild(txt(pad.l+cw+3,scY(RS)+4,"r*=\u00A3"+RS,"#a855f7",10));
+    var ptsCNHR=[];trips.forEach(function(t,i){ptsCNHR.push(scX(i)+","+scY(t.r_n))});
+    var pCNHR=document.createElementNS(ns,"polyline");pCNHR.setAttribute("points",ptsCNHR.join(" "));pCNHR.setAttribute("fill","none");pCNHR.setAttribute("stroke","#f59e0b");pCNHR.setAttribute("stroke-width","2.5");svg.appendChild(pCNHR);
+    trips.forEach(function(t,i){var dot=document.createElementNS(ns,"circle");dot.setAttribute("cx",scX(i));dot.setAttribute("cy",scY(t.mnhr));dot.setAttribute("r",2.5);dot.setAttribute("fill","#00e5ff");dot.setAttribute("fill-opacity","0.35");svg.appendChild(dot);});
+    var ptsEMA=[];trips.forEach(function(t,i){ptsEMA.push(scX(i)+","+scY(t.mnhr_ema))});
+    var pEMA=document.createElementNS(ns,"polyline");pEMA.setAttribute("points",ptsEMA.join(" "));pEMA.setAttribute("fill","none");pEMA.setAttribute("stroke","#00e5ff");pEMA.setAttribute("stroke-width","2.5");svg.appendChild(pEMA);
+    [minV,0,RS,maxV].forEach(function(v){svg.appendChild(txt(pad.l-2,scY(v)+3,"\u00A3"+Math.round(v),"#64748b",9,"end"));});
+    if(week.be_trip){var bx=scX(week.be_trip-1);svg.appendChild(ln(bx,pad.t,bx,pad.t+ch,"#22c55e","4 2",2));svg.appendChild(txt(bx,pad.t-4,"\u2605 BE","#22c55e",11,"middle"));}
+    if(week.target_trip){var tx=scX(week.target_trip-1);svg.appendChild(ln(tx,pad.t,tx,pad.t+ch,"#a855f7","4 2",2));svg.appendChild(txt(tx,pad.t-4,"\u2605 r*","#a855f7",11,"middle"));}
+    var step=Math.max(1,Math.floor(n/10));for(var i=0;i<n;i+=step)svg.appendChild(txt(scX(i),H-5,""+(i+1),"#64748b",9,"middle"));
+    var ly=pad.t+8;svg.appendChild(ln(pad.l+6,ly,pad.l+22,ly,"#f59e0b",null,2.5));svg.appendChild(txt(pad.l+25,ly+4,"CNHR","#f59e0b",8));
+    svg.appendChild(ln(pad.l+70,ly,pad.l+86,ly,"#00e5ff",null,2));svg.appendChild(txt(pad.l+89,ly+4,"m\u0303\u2099 (EMA)","#00e5ff",8));
+    var ld=document.createElementNS(ns,"circle");ld.setAttribute("cx",pad.l+150);ld.setAttribute("cy",ly);ld.setAttribute("r",3);ld.setAttribute("fill","#00e5ff");ld.setAttribute("fill-opacity","0.45");svg.appendChild(ld);
+    svg.appendChild(txt(pad.l+156,ly+4,"m\u1D62 raw","#00e5ff",8));
+  } else {
+    var maxR=Math.min(80,Math.max.apply(null,trips.map(function(t){return t.t_rho}))*1.05);
+    var bw=Math.max(2,cw/n-1);
+    var scX=function(i){return pad.l+i*(cw/n)};
+    var scY=function(v){return pad.t+ch-(Math.min(v,maxR)/maxR)*ch};
+    [0,20,40,60].forEach(function(g){if(g<=maxR){svg.appendChild(ln(pad.l,scY(g),pad.l+cw,scY(g),"#1e293b","3 3"));svg.appendChild(txt(pad.l-2,scY(g)+3,"\u00A3"+g,"#64748b",9,"end"));}});
+    svg.appendChild(ln(pad.l,scY(RS),pad.l+cw,scY(RS),"#a855f7","6 3",1.5));
+    trips.forEach(function(t,i){var x=scX(i),h2=scY(0)-scY(Math.min(t.t_rho,maxR));var fill=t.t_rho>=40?"#059669":t.t_rho>=25?"#0ea5e9":t.t_rho>=15?"#f59e0b":"#ef4444";svg.appendChild(rect(x+1,scY(Math.min(t.t_rho,maxR)),Math.max(1,bw-1),h2,fill,0.8));});
+    var step=Math.max(1,Math.floor(n/10));for(var i=0;i<n;i+=step)svg.appendChild(txt(scX(i)+bw/2,H-5,""+(i+1),"#64748b",9,"middle"));
+  }
+  return svg;
+}
+
+// === OVERVIEW CHARTS ===
+function makeOverviewCharts(){
+  var ns="http://www.w3.org/2000/svg";
+  var container=el("div",{className:"ov-grid"});
+  var n=W.length;
+  if(n<2)return container;
+
+  // Chart 1: Earnings bars
+  var d1=el("div");d1.appendChild(el("div",{className:"ov-title"},"Weekly Earnings vs Break-Even"));
+  var W2=800,H=220,pad={t:15,r:52,b:35,l:28};
+  var cw2=W2-pad.l-pad.r,ch=H-pad.t-pad.b;
+  var maxE=Math.max.apply(null,W.map(function(w){return w.total_e}).concat([CW*1.2]));
+  var bw=cw2/n;
+  var svg1=document.createElementNS(ns,"svg");svg1.setAttribute("viewBox","0 0 "+W2+" "+H);svg1.setAttribute("class","chart");
+  function scY1(v){return pad.t+ch-(v/maxE)*ch}
+  for(var g=0;g<=4;g++){var gy=maxE*g/4;var l=document.createElementNS(ns,"line");l.setAttribute("x1",pad.l);l.setAttribute("y1",scY1(gy));l.setAttribute("x2",pad.l+cw2);l.setAttribute("y2",scY1(gy));l.setAttribute("stroke","#1e293b");l.setAttribute("stroke-dasharray","3 3");svg1.appendChild(l);var t=document.createElementNS(ns,"text");t.setAttribute("x",pad.l-2);t.setAttribute("y",scY1(gy)+3);t.setAttribute("fill","#64748b");t.setAttribute("font-size",9);t.setAttribute("text-anchor","end");t.setAttribute("font-family","inherit");t.textContent="\u00A3"+Math.round(gy);svg1.appendChild(t);}
+  var bl=document.createElementNS(ns,"line");bl.setAttribute("x1",pad.l);bl.setAttribute("y1",scY1(CW));bl.setAttribute("x2",pad.l+cw2);bl.setAttribute("y2",scY1(CW));bl.setAttribute("stroke","#ef4444");bl.setAttribute("stroke-dasharray","6 3");bl.setAttribute("stroke-width",2);svg1.appendChild(bl);
+  var bt=document.createElementNS(ns,"text");bt.setAttribute("x",pad.l+cw2+3);bt.setAttribute("y",scY1(CW)+4);bt.setAttribute("fill","#ef4444");bt.setAttribute("font-size",9);bt.setAttribute("font-family","inherit");bt.textContent="\u00A3"+CW;svg1.appendChild(bt);
+  W.forEach(function(w,i){var x=pad.l+i*bw,h2=scY1(0)-scY1(w.total_e);var r=document.createElementNS(ns,"rect");r.setAttribute("x",x+2);r.setAttribute("y",scY1(w.total_e));r.setAttribute("width",Math.max(1,bw-4));r.setAttribute("height",h2);r.setAttribute("fill",PC[ph(w.final_r_n)]);r.setAttribute("fill-opacity",0.85);r.setAttribute("rx",3);svg1.appendChild(r);var t=document.createElementNS(ns,"text");t.setAttribute("x",x+bw/2);t.setAttribute("y",H-5);t.setAttribute("fill","#64748b");t.setAttribute("font-size",8);t.setAttribute("text-anchor","middle");t.setAttribute("font-family","inherit");t.textContent=w.label.split("\u2013")[0]||w.label.split("-")[0];svg1.appendChild(t);});
+  d1.appendChild(svg1);container.appendChild(d1);
+
+  // Chart 2: CNHR + MNHR lines + hours bars
+  var d2=el("div");d2.appendChild(el("div",{className:"ov-title"},"CNHR & MNHR Trajectory \u00B7 Hours"));
+  var MNHR_COL="#00e5ff";
+  var maxH=Math.max.apply(null,W.map(function(w){return w.total_h}));
+  var allRateVals=[];W.forEach(function(w){allRateVals.push(w.final_r_n);allRateVals.push(w.final_mnhr_ema)});
+  allRateVals.push(RS+5);allRateVals.push(0);
+  var maxR2=Math.max.apply(null,allRateVals);var minR2=Math.min.apply(null,allRateVals);
+  if(minR2>-5)minR2=Math.min(minR2,-2);var rangeR=maxR2-minR2;
+  var pad2={t:15,r:52,b:55,l:38};var cw3=W2-pad2.l-pad2.r,ch2=H+20-pad2.t-pad2.b;
+  var svg2=document.createElementNS(ns,"svg");svg2.setAttribute("viewBox","0 0 "+W2+" "+(H+20));svg2.setAttribute("class","chart");
+  function scYh(v){return pad2.t+ch2-(v/maxH)*ch2}
+  function scYr(v){return pad2.t+ch2-((v-minR2)/rangeR)*ch2}
+  var rStep=rangeR>60?20:rangeR>30?10:5;var rStart=Math.floor(minR2/rStep)*rStep;
+  for(var rv=rStart;rv<=maxR2;rv+=rStep){var gy2=scYr(rv);if(gy2<pad2.t-2||gy2>pad2.t+ch2+2)continue;var gl2=document.createElementNS(ns,"line");gl2.setAttribute("x1",pad2.l);gl2.setAttribute("y1",gy2);gl2.setAttribute("x2",pad2.l+cw3);gl2.setAttribute("y2",gy2);gl2.setAttribute("stroke","#1e293b");gl2.setAttribute("stroke-dasharray","3 3");svg2.appendChild(gl2);var gt2=document.createElementNS(ns,"text");gt2.setAttribute("x",pad2.l-4);gt2.setAttribute("y",gy2+3);gt2.setAttribute("fill","#94a3b8");gt2.setAttribute("font-size",8);gt2.setAttribute("text-anchor","end");gt2.setAttribute("font-family","inherit");gt2.textContent="\u00A3"+rv;svg2.appendChild(gt2);}
+  var bw2=cw3/W.length;
+  W.forEach(function(w,i){var x=pad2.l+i*bw2,h2=scYh(0)-scYh(w.total_h);var r=document.createElementNS(ns,"rect");r.setAttribute("x",x+2);r.setAttribute("y",scYh(w.total_h));r.setAttribute("width",Math.max(1,bw2-4));r.setAttribute("height",h2);r.setAttribute("fill","#1e40af");r.setAttribute("fill-opacity",0.25);r.setAttribute("rx",3);svg2.appendChild(r);var t=document.createElementNS(ns,"text");t.setAttribute("x",x+bw2/2);t.setAttribute("y",pad2.t+ch2+14);t.setAttribute("fill","#64748b");t.setAttribute("font-size",8);t.setAttribute("text-anchor","middle");t.setAttribute("font-family","inherit");t.textContent=w.label.split("\u2013")[0]||w.label.split("-")[0];svg2.appendChild(t);});
+  if(minR2<0&&maxR2>0){var zl=document.createElementNS(ns,"line");zl.setAttribute("x1",pad2.l);zl.setAttribute("y1",scYr(0));zl.setAttribute("x2",pad2.l+cw3);zl.setAttribute("y2",scYr(0));zl.setAttribute("stroke","#ef4444");zl.setAttribute("stroke-dasharray","2 2");zl.setAttribute("stroke-width",1);zl.setAttribute("stroke-opacity",0.6);svg2.appendChild(zl);}
+  if(RS>=minR2&&RS<=maxR2){var tl2=document.createElementNS(ns,"line");tl2.setAttribute("x1",pad2.l);tl2.setAttribute("y1",scYr(RS));tl2.setAttribute("x2",pad2.l+cw3);tl2.setAttribute("y2",scYr(RS));tl2.setAttribute("stroke","#a855f7");tl2.setAttribute("stroke-dasharray","6 3");tl2.setAttribute("stroke-width",1.5);svg2.appendChild(tl2);}
+  var ptsCnhr=W.map(function(w,i){return(pad2.l+i*bw2+bw2/2)+","+scYr(w.final_r_n)}).join(" ");
+  var plC=document.createElementNS(ns,"polyline");plC.setAttribute("points",ptsCnhr);plC.setAttribute("fill","none");plC.setAttribute("stroke","#f59e0b");plC.setAttribute("stroke-width",2.5);svg2.appendChild(plC);
+  W.forEach(function(w,i){var c=document.createElementNS(ns,"circle");c.setAttribute("cx",pad2.l+i*bw2+bw2/2);c.setAttribute("cy",scYr(w.final_r_n));c.setAttribute("r",4);c.setAttribute("fill","#f59e0b");svg2.appendChild(c);});
+  var ptsMnhr=W.map(function(w,i){return(pad2.l+i*bw2+bw2/2)+","+scYr(w.final_mnhr_ema)}).join(" ");
+  var plM=document.createElementNS(ns,"polyline");plM.setAttribute("points",ptsMnhr);plM.setAttribute("fill","none");plM.setAttribute("stroke",MNHR_COL);plM.setAttribute("stroke-width",2.5);svg2.appendChild(plM);
+  W.forEach(function(w,i){var c=document.createElementNS(ns,"circle");c.setAttribute("cx",pad2.l+i*bw2+bw2/2);c.setAttribute("cy",scYr(w.final_mnhr_ema));c.setAttribute("r",4);c.setAttribute("fill",SC[w.final_state]);c.setAttribute("stroke",MNHR_COL);c.setAttribute("stroke-width",1.5);svg2.appendChild(c);});
+  // Legend
+  var legY=pad2.t+ch2+28;
+  var ll1=document.createElementNS(ns,"line");ll1.setAttribute("x1",pad2.l+cw3/2-150);ll1.setAttribute("y1",legY);ll1.setAttribute("x2",pad2.l+cw3/2-134);ll1.setAttribute("y2",legY);ll1.setAttribute("stroke","#f59e0b");ll1.setAttribute("stroke-width",2.5);svg2.appendChild(ll1);
+  var lt1=document.createElementNS(ns,"text");lt1.setAttribute("x",pad2.l+cw3/2-130);lt1.setAttribute("y",legY+3);lt1.setAttribute("fill","#f59e0b");lt1.setAttribute("font-size",9);lt1.setAttribute("font-family","inherit");lt1.textContent="CNHR r\u2099";svg2.appendChild(lt1);
+  var ll2=document.createElementNS(ns,"line");ll2.setAttribute("x1",pad2.l+cw3/2-50);ll2.setAttribute("y1",legY);ll2.setAttribute("x2",pad2.l+cw3/2-34);ll2.setAttribute("y2",legY);ll2.setAttribute("stroke",MNHR_COL);ll2.setAttribute("stroke-width",2.5);svg2.appendChild(ll2);
+  var lt2=document.createElementNS(ns,"text");lt2.setAttribute("x",pad2.l+cw3/2-30);lt2.setAttribute("y",legY+3);lt2.setAttribute("fill",MNHR_COL);lt2.setAttribute("font-size",9);lt2.setAttribute("font-family","inherit");lt2.textContent="MNHR m\u0303\u2099";svg2.appendChild(lt2);
+  d2.appendChild(svg2);container.appendChild(d2);
+  return container;
+}
+
+// === LEAFLET MAP (Route Map mode) ===
+function gradientColor(value,min,max){
+  var t=(max>min)?(value-min)/(max-min):0.5;
+  var r,g,b;
+  if(t<0.5){r=255;g=Math.round(255*t*2);b=Math.round(50*(1-t*2));}
+  else{r=Math.round(255*(1-(t-0.5)*2));g=255;b=Math.round(50*(1-(t-0.5)*2));}
+  return "rgb("+r+","+g+","+b+")";
+}
+function getMapTripColor(t,trips){
+  if(mapColorMode==="default")return t.color;
+  if(mapColorMode==="four_state")return SC[t.four_state]||"#666";
+  var key=mapColorMode==="mnhr"?"mnhr_true":mapColorMode==="per_hr"?"per_hr":"per_mile";
+  var vals=trips.map(function(x){return x[key]||0});
+  return gradientColor(t[key]||0,Math.min.apply(null,vals),Math.max.apply(null,vals));
+}
+
+function destroyMap(){
+  if(weekMap){weekMap.remove();weekMap=null;}
+  mapTripLayers={};mapDeadheadLayers=[];mapSelectedTrip=null;
+}
+
+function makeLeafletMap(week){
+  destroyMap();
+  var mapDiv=document.getElementById("week-map");
+  if(!mapDiv)return;
+  weekMap=L.map("week-map",{preferCanvas:true}).setView([51.50,-0.05],11);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{attribution:"&copy; OSM &copy; CARTO",maxZoom:19}).addTo(weekMap);
+  buildMapLayers(week);
+  mapShowAll(week);
+}
+
+function buildMapLayers(week){
+  var trips=week.trips;
+  Object.values(mapTripLayers).forEach(function(l){if(l.enroute)l.enroute.remove();if(l.trip)l.trip.remove();l.markers.forEach(function(m){m.remove();});});
+  mapDeadheadLayers.forEach(function(l){l.remove();});
+  mapTripLayers={};mapDeadheadLayers=[];
+
+  trips.forEach(function(t){
+    var c=getMapTripColor(t,trips);
+    var layers={enroute:null,trip:null,markers:[]};
+    var popup="<b>#"+t.n+" "+t.pax+"</b><br>\u00a3"+t.t_earn+" ("+t.service+")<br>\u03c1="+t.rho_paid+"/hr u="+Math.round(t.util*100)+"%";
+    if(t.has_gps_track&&t.enroute_track&&t.enroute_track.length>1){
+      layers.enroute=L.polyline(t.enroute_track,{color:"#FFA500",weight:4,opacity:0.8,dashArray:"10,6"});layers.enroute.bindPopup(popup);
+    }
+    if(t.has_gps_track&&t.trip_track&&t.trip_track.length>1){
+      layers.trip=L.polyline(t.trip_track,{color:c,weight:4,opacity:0.9});layers.trip.bindPopup(popup);
+    }
+    if(t.pickup_pos){var pm=L.circleMarker(t.pickup_pos,{radius:5,color:c,fillColor:c,fillOpacity:0.9,weight:2});pm.bindPopup("#"+t.n+" PICKUP "+t.pickup);layers.markers.push(pm);}
+    if(t.dropoff_pos){var dm=L.circleMarker(t.dropoff_pos,{radius:5,color:c,fillColor:"#111",fillOpacity:0.9,weight:3});dm.bindPopup("#"+t.n+" DROPOFF "+t.dropoff);layers.markers.push(dm);}
+    mapTripLayers[t.n]=layers;
+  });
+
+  var dh=week.map_deadheads||[];
+  dh.forEach(function(d){
+    if(d.track&&d.track.length>1){
+      var line=L.polyline(d.track,{color:"#666",weight:2,opacity:0.4,dashArray:"4,8"});
+      line.bindPopup("Deadhead: #"+d.from_trip+" \u2192 #"+d.to_trip);
+      mapDeadheadLayers.push(line);
+    }
+  });
+}
+
+function mapClearAll(){
+  Object.values(mapTripLayers).forEach(function(l){if(l.enroute)l.enroute.remove();if(l.trip)l.trip.remove();l.markers.forEach(function(m){m.remove();});});
+  mapDeadheadLayers.forEach(function(l){l.remove();});
+}
+
+function mapShowTrip(num){
+  // Highlight table row
+  $$("tr.map-selected").forEach(function(r){r.classList.remove("map-selected");});
+  $$("tr.map-clickable").forEach(function(r){
+    var firstTd=r.querySelector("td");
+    if(firstTd&&parseInt(firstTd.textContent)===num)r.classList.add("map-selected");
+  });
+  // If map not initialized yet, expand it
+  if(!weekMap){
+    var body=document.getElementById("map-body");
+    var toggle=document.querySelector(".map-toggle");
+    if(body&&body.style.display==="none"){
+      body.style.display="block";
+      if(toggle)toggle.style.borderRadius="10px 10px 0 0";
+      var chev=toggle&&toggle.querySelector("span");
+      if(chev)chev.textContent="\u25bc";
+      var curW=W[selIdx];
+      setTimeout(function(){makeLeafletMap(curW);setTimeout(function(){mapShowTrip(num);},100);},100);
+      return;
+    }
+  }
+  if(!weekMap)return;
+  mapClearAll();mapSelectedTrip=num;
+  var l=mapTripLayers[num];if(!l)return;
+  var bounds=L.latLngBounds([]);
+  if(l.enroute){l.enroute.addTo(weekMap);bounds.extend(l.enroute.getBounds());}
+  if(l.trip){l.trip.addTo(weekMap);bounds.extend(l.trip.getBounds());}
+  l.markers.forEach(function(m){m.addTo(weekMap);bounds.extend(m.getLatLng());});
+  if(bounds.isValid())weekMap.fitBounds(bounds,{padding:[40,40]});
+}
+
+function mapShowAll(week){
+  mapClearAll();mapSelectedTrip=null;
+  $$("tr.map-selected").forEach(function(r){r.classList.remove("map-selected");});
+  var bounds=L.latLngBounds([]);
+  Object.values(mapTripLayers).forEach(function(l){
+    if(l.enroute){l.enroute.addTo(weekMap);try{bounds.extend(l.enroute.getBounds())}catch(e){}}
+    if(l.trip){l.trip.addTo(weekMap);try{bounds.extend(l.trip.getBounds())}catch(e){}}
+    l.markers.forEach(function(m){m.addTo(weekMap);bounds.extend(m.getLatLng());});
+  });
+  mapDeadheadLayers.forEach(function(l){l.addTo(weekMap);try{bounds.extend(l.getBounds())}catch(e){}});
+  if(bounds.isValid())weekMap.fitBounds(bounds,{padding:[40,40]});
+}
+
+function setMapColorMode(mode,week){
+  mapColorMode=mode;
+  $$(".map-color-btn").forEach(function(b){b.classList.toggle("active",b.dataset.mode===mode);});
+  buildMapLayers(week);
+  if(mapSelectedTrip)mapShowTrip(mapSelectedTrip);else mapShowAll(week);
+}
+
+// === RENDER ===
+function render(){
+  destroyMap();
+  var app=document.getElementById("app");app.innerHTML="";
+  var w=W[selIdx];var p=ph(w.final_r_n);
+
+  // Header
+  app.appendChild(el("h1",{},[document.createTextNode("CNHR"),el("span",{},"\u2013"),document.createTextNode("MNHR "),el("span",{},"Dashboard")]));
+  app.appendChild(el("div",{className:"sub"},"Cost-Normalised & Marginal Net Hourly Rate \u00B7 2-8 Mar 2026 \u00B7 C_w=\u00a3"+CW+"/wk \u00B7 r*=\u00a3"+RS+"/hr \u00B7 \u03b1="+ALPHA+" \u00B7 h\u0304="+H_BAR+"h \u00B7 \u03bb=\u00a3"+LAMBDA_PAID.toFixed(2)+"/hr"));
+
+  // Aggregate stats
+  var tE=0,tH=0,tN=0,atT=0,atBE=0;
+  W.forEach(function(x){tE+=x.total_e;tH+=x.total_h;tN+=x.total_n;if(x.final_r_n>=RS)atT++;if(x.total_e>=CW)atBE++});
+  var aggRho=tH>0?tE/tH:0,aggRn=tH>0?(tE-CW*W.length)/tH:0;
+  var stats=el("div",{className:"stats"});
+  [[" Total Earnings","\u00a3"+m$(tE),W.length+" weeks","#f8fafc"],
+   ["Total Hours",tH.toFixed(0)+"h",tN+" trips","#f8fafc"],
+   ["Aggregate \u03c1","\u00a3"+m$(aggRho),"gross \u00a3/hr","#06b6d4"],
+   ["Aggregate CNHR","\u00a3"+m$(aggRn),"net \u00a3/hr",aggRn>=RS?"#059669":aggRn>=0?"#d97706":"#dc2626"],
+   ["\u03bb (Cost Rate)","\u00a3"+(CW/H_BAR).toFixed(2)+"/hr","h\u0304="+H_BAR+"h","#94a3b8"],
+   ["Weeks at r*",atT+"/"+W.length,"target achieved",atT>0?"#059669":"#dc2626"],
+   ["Weeks at BE",atBE+"/"+W.length,"costs covered",atBE>5?"#059669":"#d97706"],
+   ["Mean Util",Math.round(w.mean_util*100)+"%","trip utilisation","#22c55e"]
+  ].forEach(function(s){var d=el("div",{className:"stat"});d.appendChild(el("div",{className:"stat-label"},s[0]));d.appendChild(el("div",{className:"stat-val",style:{color:s[3]}},s[1]));d.appendChild(el("div",{className:"stat-sub"},s[2]));stats.appendChild(d);});
+  app.appendChild(stats);
+
+  // Overview charts (only if multi-week)
+  if(W.length>1){
+    var ovPanel=el("div",{className:"panel"});ovPanel.appendChild(makeOverviewCharts());app.appendChild(ovPanel);
+  }
+
+  // Week selector cards (only if multi-week)
+  if(W.length>1){
+    app.appendChild(el("div",{className:"sub",style:{marginTop:"14px",fontWeight:"600",textTransform:"uppercase",letterSpacing:"1px"}},"Select Week"));
+    var cards=el("div",{className:"cards"});
+    for(var ci=W.length-1;ci>=0;ci--){(function(i){
+      var wk=W[i];var pp=ph(wk.final_r_n);var ws=wk.final_state;
+      var c=el("div",{className:"card"+(i===selIdx?" active":""),onClick:function(){selIdx=i;render()}});
+      c.style.borderColor=i===selIdx?SC[ws]||PC[pp]:"#1e293b";
+      c.appendChild(el("div",{className:"card-label"},wk.label));
+      var badge=el("span",{className:"card-phase"},SL[ws]||pp);badge.style.background=(SC[ws]||PC[pp])+"20";badge.style.color=SC[ws]||PC[pp];
+      var row=el("div",{style:{display:"flex",gap:"8px",alignItems:"center"}},[badge,el("span",{style:{color:"#94a3b8",fontSize:"10px"}},wk.total_n+" trips")]);
+      c.appendChild(row);
+      c.appendChild(el("div",{className:"card-earn"},"\u00a3"+m$(wk.total_e)));
+      c.appendChild(el("div",{className:"card-meta"},m$(wk.total_h)+"h \u00b7 \u03c1=\u00a3"+m$(wk.final_rho)+"/hr"));
+      var rn=el("div",{className:"card-rn"},"r\u2099=\u00a3"+m$(wk.final_r_n)+"/hr");rn.style.color=PC[pp];c.appendChild(rn);
+      c.appendChild(el("div",{className:"card-meta",style:{color:"#00e5ff",fontWeight:600}},"m\u0303\u2099=\u00a3"+m$(wk.final_mnhr_ema)+"/hr"));
+      c.appendChild(el("div",{className:"card-inf"},(wk.be_trip?"BE@#"+wk.be_trip:"No BE")+" \u00b7 "+(wk.target_trip?"r*@#"+wk.target_trip:"No r*")));
+      cards.appendChild(c);
+    })(ci)}
+    app.appendChild(cards);
+  }
+
+  // Detail panel
+  var panel=el("div",{className:"panel"});
+  var hdr=el("div",{className:"panel-hdr"});
+  var hdrL=el("div");
+  hdrL.appendChild(el("div",{className:"panel-title"},w.label));
+  hdrL.appendChild(el("div",{className:"panel-sub"},w.total_n+" trips \u00b7 \u00a3"+m$(w.total_e)+" \u00b7 "+m$(w.total_h)+"h"+(w.stmt_total?" \u00b7 Statement: \u00a3"+m$(w.stmt_total):"")));
+  hdr.appendChild(hdrL);
+  var btns=el("div",{className:"btns"});
+  ["earnings","cnhr","mnhr","tripRate"].forEach(function(m2){
+    var label=m2==="earnings"?"Cum \u00a3":m2==="cnhr"?"CNHR r\u2099":m2==="mnhr"?"MNHR m\u0303\u2099":"Trip \u03c1";
+    var b=el("button",{className:"btn"+(chartMode===m2?" active":""),onClick:function(){chartMode=m2;render()}},label);
+    btns.appendChild(b);
+  });
+  // CSV export
+  var csvBtn=el("button",{className:"btn",style:{background:"#1e3a5f",color:"#60a5fa",marginLeft:"6px"},onClick:function(){
+    var rows=["#,Day,Time,Svc,Earn,Dur_h,Rho,MNHR,MNHR_EMA,Cum_E,Cum_H,Rho_avg,CNHR,Rec%,State"];
+    w.trips.forEach(function(t){rows.push([t.n,t.day,t.time,t.service,t.t_earn,t.t_dur,t.t_rho,t.mnhr,t.mnhr_ema,t.cum_e,t.cum_h,t.rho,t.r_n,t.recovery,t.state].join(","));});
+    var blob=new Blob([rows.join("\n")],{type:"text/csv"});var url=URL.createObjectURL(blob);var a=document.createElement("a");a.href=url;a.download="cnhr_"+w.key+".csv";a.click();URL.revokeObjectURL(url);
+  }});csvBtn.textContent="\u2b07 CSV";btns.appendChild(csvBtn);
+  hdr.appendChild(btns);panel.appendChild(hdr);
+
+  // Chart area (always SVG)
+  panel.appendChild(makeSVGChart(w,chartMode));
+
+  // Break-even + Target info boxes
+  var infGrid=el("div",{className:"inf-grid"});
+  var beTrip=w.be_trip?w.trips[w.be_trip-1]:null;
+  var tgtTrip=w.target_trip?w.trips[w.target_trip-1]:null;
+  var beBox=el("div",{className:"inf-box"});
+  beBox.style.background=beTrip?"rgba(34,197,94,0.08)":"rgba(239,68,68,0.08)";
+  beBox.style.border="1px solid "+(beTrip?"#16a34a33":"#dc262633");
+  var beTitle=el("div",{className:"inf-title"},"\u2605 Break-Even (E\u2099 \u2265 \u00a3"+CW+")");beTitle.style.color=beTrip?"#22c55e":"#ef4444";beBox.appendChild(beTitle);
+  if(beTrip){beBox.appendChild(el("div",{className:"inf-big"},"Trip #"+w.be_trip));beBox.appendChild(el("div",{className:"inf-meta"},beTrip.day+" "+beTrip.time+" \u00b7 After "+m$(beTrip.cum_h)+"h"));beBox.appendChild(el("div",{className:"inf-meta"},"Cum: \u00a3"+m$(beTrip.cum_e)+" \u00b7 r\u2099=\u00a3"+m$(beTrip.r_n)+"/hr"));}
+  else{beBox.appendChild(el("div",{style:{fontSize:"16px",fontWeight:700,color:"#f87171"}},"Not Reached"));beBox.appendChild(el("div",{className:"inf-meta"},"Max: \u00a3"+m$(w.total_e)+" \u2014 shortfall \u00a3"+m$(CW-w.total_e)));}
+  infGrid.appendChild(beBox);
+  var tgtBox=el("div",{className:"inf-box"});
+  tgtBox.style.background=tgtTrip?"rgba(168,85,247,0.08)":"rgba(100,116,139,0.08)";
+  tgtBox.style.border="1px solid "+(tgtTrip?"#a855f733":"#47556933");
+  var tgtTitle=el("div",{className:"inf-title"},"\u2605 Target Rate (r\u2099 \u2265 \u00a3"+RS+"/hr)");tgtTitle.style.color=tgtTrip?"#a855f7":"#64748b";tgtBox.appendChild(tgtTitle);
+  if(tgtTrip){tgtBox.appendChild(el("div",{className:"inf-big"},"Trip #"+w.target_trip));tgtBox.appendChild(el("div",{className:"inf-meta"},tgtTrip.day+" "+tgtTrip.time+" \u00b7 r\u2099=\u00a3"+m$(tgtTrip.r_n)+"/hr"));}
+  else{tgtBox.appendChild(el("div",{style:{fontSize:"16px",fontWeight:700,color:"#94a3b8"}},"Not Reached"));tgtBox.appendChild(el("div",{className:"inf-meta"},"Final r\u2099=\u00a3"+m$(w.final_r_n)+"/hr"));}
+  infGrid.appendChild(tgtBox);
+  panel.appendChild(infGrid);
+
+  // MNHR Diagnostics + Four-State boxes
+  var mnhrPanel=el("div",{className:"inf-grid",style:{marginTop:"12px"}});
+  var mnhrBox=el("div",{className:"inf-box"});mnhrBox.style.background="rgba(6,182,212,0.06)";mnhrBox.style.border="1px solid #00e5ff33";
+  var mnhrTitle=el("div",{className:"inf-title"},"MNHR Diagnostics");mnhrTitle.style.color="#00e5ff";mnhrBox.appendChild(mnhrTitle);
+  mnhrBox.appendChild(el("div",{className:"inf-big",style:{color:"#00e5ff"}},"\u00a3"+m$(w.final_mnhr_ema)+"/hr"));
+  mnhrBox.appendChild(el("div",{className:"inf-meta"},"Final m\u0303\u2099 (EMA \u03b1="+ALPHA+") \u00b7 \u03bb=\u00a3"+m$(LAMBDA_PAID)+"/hr"));
+  mnhrBox.appendChild(el("div",{className:"inf-meta"},"Cost rate: \u00a3"+m$(w.cost_rate)+"/hr \u00b7 "+w.total_h.toFixed(1)+"h"));
+  mnhrPanel.appendChild(mnhrBox);
+  var stBox=el("div",{className:"inf-box"});var fs=w.final_state;
+  stBox.style.background=(SC[fs]||"#334155")+"12";stBox.style.border="1px solid "+(SC[fs]||"#334155")+"33";
+  var stTitle=el("div",{className:"inf-title"},"Four-State Diagnostic");stTitle.style.color=SC[fs]||"#94a3b8";stBox.appendChild(stTitle);
+  stBox.appendChild(el("div",{className:"inf-big",style:{color:SC[fs]||"#f8fafc"}},SL[fs]||fs));
+  var stDesc={ACCEL_REC:"Below target but improving",SUSTAINED:"At target and improving",DECEL:"At target but declining",STALLED:"Below target and declining"};
+  stBox.appendChild(el("div",{className:"inf-meta"},stDesc[fs]||""));
+  var stateCounts={ACCEL_REC:0,SUSTAINED:0,DECEL:0,STALLED:0};
+  w.trips.forEach(function(t){if(stateCounts[t.state]!==undefined)stateCounts[t.state]++});
+  var scStr=Object.keys(stateCounts).map(function(k){return SL[k]+": "+stateCounts[k]}).join(" \u00b7 ");
+  stBox.appendChild(el("div",{className:"inf-small"},"Distribution: "+scStr));
+  mnhrPanel.appendChild(stBox);panel.appendChild(mnhrPanel);
+
+  // AM/GM Central Tendency
+  var amgmGrid=el("div",{className:"amgm-grid"});
+  var ctBox=el("div",{className:"amgm-box"});
+  ctBox.appendChild(el("div",{className:"amgm-title"},"\u03c1 Central Tendency"));
+  ctBox.appendChild(el("div",{className:"amgm-big"},"\u00a3"+m$(w.am_rho_paid)+"/hr"));
+  ctBox.appendChild(el("div",{className:"amgm-sub"},"AM(\u03c1) \u00b7 GM(\u03c1)=\u00a3"+m$(w.gm_rho_paid)+"/hr"));
+  var gapVal=w.ag_gap_paid;var gapLabel=gapVal>4?"High volatility":gapVal>2?"Moderate":"Disciplined";var gapCol=gapVal>4?"#f87171":gapVal>2?"#fbbf24":"#34d399";
+  var gapEl=el("div",{className:"amgm-gap"});gapEl.style.background=gapCol+"20";gapEl.style.color=gapCol;gapEl.textContent="Gap: \u00a3"+m$(gapVal)+" \u00b7 "+gapLabel;
+  ctBox.appendChild(gapEl);amgmGrid.appendChild(ctBox);
+  var maBox=el("div",{className:"amgm-box"});
+  maBox.appendChild(el("div",{className:"amgm-title"},"MNHR Averages"));
+  maBox.appendChild(el("div",{className:"amgm-big",style:{color:w.am_mnhr_paid>=0?"#34d399":"#f87171"}},"\u00a3"+m$(w.am_mnhr_paid)+"/hr"));
+  maBox.appendChild(el("div",{className:"amgm-sub"},"AM(m) = AM(\u03c1) \u2212 \u03bb"));
+  amgmGrid.appendChild(maBox);panel.appendChild(amgmGrid);
+
+  // Service-Type Breakdown
+  var svcPanel=el("div",{style:{background:"linear-gradient(135deg,#0c1425,#0f172a)",border:"1px solid #1e293b",borderRadius:"10px",padding:"12px 14px",margin:"12px 0"}});
+  svcPanel.appendChild(el("div",{style:{color:"#e2e8f0",fontSize:"12px",fontWeight:700,marginBottom:"8px"}},"Service-Type Breakdown"));
+  var svcData={};w.trips.forEach(function(t){var s=t.service||"Unknown";if(!svcData[s])svcData[s]={n:0,e:0,h:0};svcData[s].n++;svcData[s].e+=t.t_earn;svcData[s].h+=t.t_dur;});
+  var svcGrid=el("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:"8px"}});
+  Object.keys(svcData).sort().forEach(function(s){var d=svcData[s];var rho=d.h>0?(d.e/d.h).toFixed(2):0;var mnhr=d.h>0?((d.e/d.h)-LAMBDA_PAID).toFixed(2):0;var rhoColor=rho>=30?"#4ade80":(rho>=20?"#facc15":"#f87171");var card=el("div",{style:{background:"#1e293b",borderRadius:"8px",padding:"8px"}});card.innerHTML="<div style='color:#22d3ee;font-size:10px;font-weight:700;margin-bottom:4px'>"+s+"</div><div style='font-size:11px;color:#e2e8f0'>\u00a3"+d.e.toFixed(2)+" \u00b7 "+d.n+" trips</div><div style='font-size:10px;color:"+rhoColor+"'>\u03c1=\u00a3"+rho+"/hr</div><div style='font-size:9px;color:#94a3b8'>m=\u00a3"+mnhr+"/hr</div>";svcGrid.appendChild(card);});
+  svcPanel.appendChild(svcGrid);panel.appendChild(svcPanel);
+
+  // Trip-Level Insights (collapsible)
+  var insCollapsed=true;
+  var insToggle=el("div",{className:"insights-toggle",onClick:function(){insCollapsed=!insCollapsed;insBody.style.display=insCollapsed?"none":"block";insChev.textContent=insCollapsed?"\u25b6":"\u25bc";insToggle.style.borderRadius=insCollapsed?"10px":"10px 10px 0 0";}});
+  insToggle.style.marginTop="14px";
+  var insChev=el("span",{style:{color:"#a855f7",fontSize:"11px",marginRight:"8px"}},"\u25b6");
+  var insTitleEl=el("span",{style:{color:"#f8fafc",fontWeight:700,fontSize:"13px"}},"Trip-Level Insights \u00b7 "+w.label);
+  insToggle.appendChild(el("div",{style:{display:"flex",alignItems:"center"}},[insChev,insTitleEl]));
+  insToggle.appendChild(el("span",{style:{color:"#64748b",fontSize:"10px"}},"click to expand"));
+  panel.appendChild(insToggle);
+  var insBody=el("div",{className:"insights-body"});
+  var dayKeys=Object.keys(w.days).sort();
+  dayKeys.forEach(function(dk){
+    var dd=w.days[dk];var dayDiv=el("div",{className:"insight-day"});
+    dayDiv.appendChild(el("div",{className:"insight-day-hdr"},dk+" \u00b7 "+dd.n+" trips \u00b7 \u00a3"+m$(dd.earn)+" \u00b7 "+dd.hours.toFixed(2)+"h"));
+    dd.trips.forEach(function(t){
+      var phase=t.r_n>=RS?"target":t.r_n>=0?"recovery":"deficit";
+      var stCol=SC[t.state]||"#94a3b8";
+      var tripDiv=el("div",{className:"insight-trip phase-"+phase});
+      var stBadge=el("span",{className:"insight-state"});stBadge.style.background=stCol+"25";stBadge.style.color=stCol;stBadge.textContent=SL[t.state]||t.state;
+      tripDiv.appendChild(el("span",{className:"trip-num"},"#"+t.n+" "+t.time+" "));
+      tripDiv.appendChild(stBadge);
+      tripDiv.appendChild(document.createTextNode(" r\u2099=\u00a3"+m$(t.r_n)+" \u03c1=\u00a3"+m$(t.t_rho)+" m\u0303=\u00a3"+m$(t.mnhr_ema)));
+      dayDiv.appendChild(tripDiv);
+    });
+    insBody.appendChild(dayDiv);
+  });
+  panel.appendChild(insBody);
+
+  // Trip table
+  var tblWrap=el("div",{className:"tbl-wrap"});var tbl=el("table");
+  var thead=el("thead");var hr=el("tr");
+  ["#","Day","Time","Svc","Pax","Earn","Dur","\u03c1 trip","m\u1d62","m\u0303\u2099","Cum \u00a3","Cum H","\u03c1 avg","r\u2099","Rec%","State"].forEach(function(h){hr.appendChild(el("th",{},h));});
+  thead.appendChild(hr);tbl.appendChild(thead);
+  var tbody=el("tbody");
+  for(var ti=w.trips.length-1;ti>=0;ti--){var t=w.trips[ti];
+    var tp=ph(t.r_n);var isBE=t.n===w.be_trip,isTgt=t.n===w.target_trip;
+    var tr=el("tr",{className:(isBE?"be-row":isTgt?"tgt-row":"")+" map-clickable"});
+    (function(num){tr.addEventListener("click",function(){mapShowTrip(num)});})(t.n);
+    var marker=isBE?" \u2605":isTgt?" \u25c6":"";
+    tr.appendChild(el("td",{style:{color:"#f8fafc",fontWeight:(isBE||isTgt)?700:400}},t.n+marker));
+    tr.appendChild(el("td",{style:{color:"#94a3b8"}},t.day));
+    tr.appendChild(el("td",{style:{color:"#94a3b8"}},t.time));
+    tr.appendChild(el("td",{style:{color:"#67e8f9",fontSize:"9px"}},t.service));
+    tr.appendChild(el("td",{style:{color:"#94a3b8",fontSize:"9px"}},t.pax||""));
+    tr.appendChild(el("td",{style:{color:"#f8fafc"}},"\u00a3"+m$(t.t_earn)));
+    tr.appendChild(el("td",{style:{color:"#94a3b8"}},Math.round(t.t_dur*60)+"m"));
+    tr.appendChild(el("td",{style:{color:t.t_rho>=35?"#34d399":t.t_rho>=20?"#fbbf24":"#f87171"}},"\u00a3"+m$(t.t_rho)));
+    tr.appendChild(el("td",{style:{color:t.mnhr>=0?"#34d399":"#f87171",fontSize:"9px"}},"\u00a3"+m$(t.mnhr)));
+    tr.appendChild(el("td",{style:{color:"#00e5ff",fontSize:"9px"}},"\u00a3"+m$(t.mnhr_ema)));
+    tr.appendChild(el("td",{style:{color:"#fbbf24",fontWeight:600}},"\u00a3"+m$(t.cum_e)));
+    tr.appendChild(el("td",{style:{color:"#94a3b8"}},m$(t.cum_h)+"h"));
+    tr.appendChild(el("td",{style:{color:"#06b6d4"}},"\u00a3"+m$(t.rho)));
+    tr.appendChild(el("td",{style:{fontWeight:700,color:PC[tp]}},"\u00a3"+m$(t.r_n)));
+    tr.appendChild(el("td",{style:{color:t.recovery>=100?"#34d399":"#94a3b8"}},m$(t.recovery)+"%"));
+    var badge=el("span",{className:"phase-badge"},SL[t.state]||t.state);badge.style.background=(SC[t.state]||"#334155")+"20";badge.style.color=SC[t.state]||"#94a3b8";
+    tr.appendChild(el("td",{},[badge]));
+    tbody.appendChild(tr);
+  }
+  tbl.appendChild(tbody);tblWrap.appendChild(tbl);panel.appendChild(tblWrap);
+
+  // Route Map (collapsible, starts collapsed)
+  var mapInitialized=false;
+  var mapToggle=el("div",{className:"map-toggle",onClick:function(){
+    var body=document.getElementById("map-body");
+    var isCollapsed=body.style.display==="none";
+    body.style.display=isCollapsed?"block":"none";
+    mapChev.textContent=isCollapsed?"\u25bc":"\u25b6";
+    mapToggle.style.borderRadius=isCollapsed?"10px 10px 0 0":"10px";
+    if(isCollapsed&&!mapInitialized){
+      mapInitialized=true;
+      setTimeout(function(){makeLeafletMap(w);},100);
+    }
+  }});
+  var mapChev=el("span",{style:{color:"#22c55e",fontSize:"11px",marginRight:"8px"}},"\u25b6");
+  var mapTitleEl=el("span",{style:{color:"#f8fafc",fontWeight:700,fontSize:"13px"}},"Route Map \u00b7 "+w.label);
+  mapToggle.appendChild(el("div",{style:{display:"flex",alignItems:"center"}},[mapChev,mapTitleEl]));
+  mapToggle.appendChild(el("span",{style:{color:"#64748b",fontSize:"10px"}},"click to expand"));
+  panel.appendChild(mapToggle);
+  var mapBody=el("div",{id:"map-body",className:"map-body"});
+  var mapContainer=el("div",{className:"map-container"});
+  mapContainer.appendChild(el("div",{id:"week-map"}));
+  // Color mode buttons
+  var colorBtns=el("div",{className:"map-color-btns"});
+  ["default","mnhr","four_state","per_hr","per_mile"].forEach(function(mode){
+    var label=mode==="default"?"Default":mode==="mnhr"?"MNHR":mode==="four_state"?"State":mode==="per_hr"?"\u00a3/hr":"\u00a3/mi";
+    var b=el("button",{className:"map-color-btn"+(mapColorMode===mode?" active":""),"data-mode":mode,onClick:function(){setMapColorMode(mode,w);}},label);
+    colorBtns.appendChild(b);
+  });
+  mapContainer.appendChild(colorBtns);
+  // Show All button
+  var showAllBtn=el("button",{className:"map-show-all-btn",onClick:function(){mapShowAll(w);}},"Show All Trips");
+  mapContainer.appendChild(showAllBtn);
+  // Legend
+  var legend=el("div",{className:"map-legend"});
+  legend.innerHTML="<div class='map-legend-row'><span class='map-legend-line' style='background:#FFA500'></span> Enroute</div><div class='map-legend-row'><span class='map-legend-line' style='background:#22c55e'></span> Trip</div><div class='map-legend-row'><span class='map-legend-line' style='background:#666;opacity:0.5'></span> Deadhead</div>";
+  mapContainer.appendChild(legend);
+  mapBody.appendChild(mapContainer);
+  panel.appendChild(mapBody);
+
+  app.appendChild(panel);
+
+  // Conclusion (aggregate stats)
+  if(W.length>1){
+    var conc=el("div",{className:"conclusion"});
+    conc.appendChild(el("div",{className:"conclusion-title"},"Conclusion & Summary"));
+    var cRho=tH>0?tE/tH:0,cRn=tH>0?(tE-CW*W.length)/tH:0;
+    var cGrid=el("div",{className:"conclusion-grid"});
+    [["Total Earnings","\u00a3"+m$(tE),W.length+" weeks","#f8fafc"],
+     ["Total Costs","\u00a3"+m$(CW*W.length),"\u00a3"+CW+"\u00d7"+W.length,"#f87171"],
+     ["Net","\u00a3"+m$(tE-CW*W.length),tE>=CW*W.length?"surplus":"deficit",tE>=CW*W.length?"#34d399":"#f87171"],
+     ["Aggregate CNHR","\u00a3"+m$(cRn)+"/hr",cRn>=RS?"At target":"Below",cRn>=RS?"#34d399":"#f87171"],
+     ["Weeks at r*",atT+"/"+W.length,"target",atT>0?"#34d399":"#f87171"],
+     ["Weeks at BE",atBE+"/"+W.length,"break-even",atBE>0?"#34d399":"#f87171"]
+    ].forEach(function(c){var card=el("div",{className:"conclusion-card"});card.appendChild(el("div",{className:"cc-label"},c[0]));var v=el("div",{className:"cc-val"},c[1]);v.style.color=c[3];card.appendChild(v);card.appendChild(el("div",{className:"cc-sub"},c[2]));cGrid.appendChild(card);});
+    conc.appendChild(cGrid);app.appendChild(conc);
+  }
+
+  app.appendChild(el("div",{className:"foot"},"CNHR\u2013MNHR Dashboard v3.0 \u00b7 \u03b1="+ALPHA+" \u00b7 h\u0304="+H_BAR+"h \u00b7 \u03bb=\u00a3"+LAMBDA_PAID.toFixed(2)+"/hr \u00b7 Portal data"));
+}
+
+render();
+</script>
+</body>
+</html>

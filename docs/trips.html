@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earnings &amp; portal automation — ride-share metrics</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <h1>Earnings &amp; portal automation</h1>
+    <p class="sub">The bookkeeping layer: a Node.js tool that keeps a complete, auditable local record of
+    every trip and payment.</p>
+  </header>
+
+  <div class="explain">
+    <b>Why it exists.</b> Uber shows drivers their history through a web portal — fine for glancing,
+    useless for analysis. This tool drives a real browser session over the portal, extracts every
+    activity and weekly statement, and stores them as structured JSON. A reconciliation step then audits
+    the two against each other (trips seen on screen vs. money actually paid), catching gaps and
+    adjustments. Everything downstream — the metrics engine, the dashboards — trusts this layer for the
+    “what was actually earned” side of the equation. Uber weeks run Monday 04:00 to Monday 04:00, which
+    is why the charts are keyed that way.
+  </div>
+
+  <div class="cards" id="hero"></div>
+
+  <div class="row2">
+    <div class="panel"><h3>Weekly gross earnings (£)</h3><div class="note">17 Uber weeks, portal-synced</div><div id="earn"></div></div>
+    <div class="panel"><h3>Weekly activities</h3><div class="note">Trips plus incentive/adjustment events</div><div id="cnt"></div></div>
+  </div>
+
+  <div class="panel">
+    <h3>Weekly table</h3>
+    <div class="note">From uber/report/trips/week_*.json</div>
+    <div id="tbl"></div>
+  </div>
+
+  <footer class="site">Tool: browser automation (Node.js) with automated sync, tabulation, CSV export and
+  statement audit; 23 development checkpoints, tested with Jest.</footer>
+</div>
+<script src="assets/site.js"></script>
+<script>
+getJSON('data/trips.json').then(t => {
+  const w = t.weekly;
+  const best = w.reduce((a, b) => b.earnings > a.earnings ? b : a);
+  document.getElementById('hero').innerHTML =
+    card(fmt(t.total_activities), 'activities', 'Dec 2025 – Mar 2026') +
+    card('£' + fmt(t.total_earnings), 'gross earnings', '17 weeks') +
+    card('£' + fmt(best.earnings), 'best week', best.label) +
+    card('£' + fmt(t.total_earnings / w.filter(x => x.trips > 0).length), 'average week', 'gross');
+  barChart(document.getElementById('earn'), w.map(x => ({ label: x.label, short: x.week.slice(5), v: x.earnings })), { pre: '£' });
+  barChart(document.getElementById('cnt'), w.map(x => ({ label: x.label, short: x.week.slice(5), v: x.trips })), {});
+  document.getElementById('tbl').innerHTML =
+    '<table><tr><th>Week</th><th class="num">Activities</th><th class="num">Gross £</th></tr>' +
+    w.map(x => `<tr><td>${x.label}</td><td class="num">${x.trips}</td><td class="num">£${fmt(x.earnings, 2)}</td></tr>`).join('') +
+    '</table>';
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demand &amp; shift timing — ride-share metrics</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <h1>Demand &amp; shift timing (Sentinel)</h1>
+    <p class="sub">A polling daemon that watches London's transport network, on the theory that ride
+    demand can be seen coming.</p>
+  </header>
+
+  <div class="explain">
+    <b>The idea.</b> Ride-share pricing “surges” when demand outstrips drivers — and demand in London is
+    largely created by identifiable events: a Tube line going down, 60,000 people leaving a football
+    match, trains cancelled in the rain. <b>Sentinel</b> polls Transport for London's APIs (ten
+    endpoints), National Rail feeds, football fixtures, Ticketmaster events and Met Office weather on a
+    loop, logging everything to a database. The hypothesis under test: <i>surge follows learnable
+    patterns, so shift timing and positioning can be chosen from transport data rather than guesswork</i>.
+    Below is one real captured snapshot from a driving evening — note the Bakerloo line down with severe
+    delays: exactly the kind of signal that puts extra passengers in cars.
+  </div>
+
+  <div class="cards" id="hero"></div>
+
+  <div class="panel">
+    <h3>Tube / rail line status at snapshot</h3>
+    <div class="note" id="ts"></div>
+    <div class="linelist" id="lines"></div>
+  </div>
+
+  <div class="row2">
+    <div class="panel">
+      <h3>Serious road disruptions (sample)</h3>
+      <div class="note">From the TfL road network feed</div>
+      <div id="roads" style="font-size:.82rem; color:var(--ink2); line-height:1.6"></div>
+    </div>
+    <div class="panel">
+      <h3>London fixtures that evening</h3>
+      <div class="note">Football feed, filtered to London clubs</div>
+      <div id="fixtures" style="font-size:.82rem; color:var(--ink2); line-height:1.6"></div>
+    </div>
+  </div>
+
+  <footer class="site">Tool: Python daemon, SQLite, ten TfL endpoints + rail/fixtures/events/weather;
+  runs on a shift-length timer (e.g. --duration 8h).</footer>
+</div>
+<script src="assets/site.js"></script>
+<script>
+getJSON('data/demand.json').then(s => {
+  document.getElementById('hero').innerHTML =
+    card(s.network_health_pct + '%', 'network health', s.disrupted_lines + ' of ' + s.total_lines + ' lines disrupted') +
+    card(fmt(s.road_total), 'road disruptions', 'TfL road network') +
+    card(fmt(s.station_issues_total), 'station issues', s.station_closures + ' closures') +
+    card(fmt(s.arrivals_tracked), 'live arrivals', s.arrival_stations + ' stations') +
+    card(fmt(s.events_total), 'events tracked', 'Ticketmaster feed') +
+    card(s.weather_temp != null ? s.weather_temp.toFixed(0) + '°C' : '—', 'weather', 'Met Office feed');
+  document.getElementById('ts').textContent = 'Captured ' + s.timestamp.replace('T', ' ').slice(0, 16) + ' — a real polling cycle, stored as data/live.json';
+  const sev = { 'Good Service': '--good', 'Minor Delays': '--warn', 'Part Closure': '--serious', 'Severe Delays': '--critical', 'Part Suspended': '--critical' };
+  document.getElementById('lines').innerHTML = s.lines.map(l =>
+    `<div class="lineitem" ${l.reason ? `title="${l.reason.replace(/"/g, '&quot;')}"` : ''}><span>${l.name}</span>
+     <span class="status" style="color:var(${sev[l.status] || '--muted'})">${l.status}</span></div>`).join('');
+  document.getElementById('roads').innerHTML = (s.road_serious || []).map(r =>
+    `<div style="margin-bottom:8px"><b style="color:var(--ink)">${r.category}</b> — ${r.location}<br><span style="color:var(--muted)">${r.comments}</span></div>`).join('') || '—';
+  document.getElementById('fixtures').innerHTML = (s.football_london || []).map(f =>
+    `<div>${f.home} v ${f.away} <span style="color:var(--muted)">· ${f.comp}</span></div>`).join('') || '—';
+});
+</script>
+</body>
+</html>

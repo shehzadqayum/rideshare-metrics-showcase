@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trip-selection metrics — ride-share metrics</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <h1>Trip-selection metrics (CNHR / MNHR)</h1>
+    <p class="sub">The centre of the suite: a pipeline that turns screenshots of ride offers into an honest
+    hourly rate, so “should I take this trip?” has a numerical answer.</p>
+  </header>
+
+  <div class="explain">
+    <b>The problem, from scratch.</b> When an offer appears on a driver's screen it shows a headline fare —
+    say £12 for 25 minutes. That number is misleading in three ways: it ignores the unpaid drive <i>to</i>
+    the pickup, it ignores the fixed weekly costs of running the vehicle (insurance, hire, charging —
+    about <b>£430/week</b> here), and it says nothing about whether the week as a whole is on track.
+    <br><br>
+    <b>The fix — two metrics.</b>
+    <b>CNHR</b> (cost-normalised hourly rate) is the week's running answer to <i>“after all costs, what has
+    each hour actually paid so far?”</i>. <b>MNHR</b> (marginal net hourly rate) asks the forward-looking
+    question: <i>“at the current pace, is the next hour worth working?”</i>. Both come in a <i>paid</i>
+    variant (paid time only) and a <i>true</i> variant that also counts the unpaid en-route minutes the
+    routes page makes visible. A week is judged against a target rate of <b>£15/h after costs</b>.
+    <br><br>
+    <b>How the data gets here.</b> An AI vision model (Claude) reads each screenshot; GPS logs anchor it in
+    space; browser automation supplies the final settled earnings from the portal (tips and adjustments
+    included); parsed charging invoices supply the cost side. The pipeline then computes per-trip and
+    weekly metrics and classifies each week into one of four states.
+  </div>
+
+  <div class="cards" id="hero"></div>
+
+  <div class="panel">
+    <h3>Cost-normalised hourly rate by week (£/h)</h3>
+    <div class="note">Dot colour = the week's diagnostic state. The dashed line is the £15/h target.</div>
+    <div class="legend" id="cnhrLegend"></div>
+    <div id="cnhrChart"></div>
+  </div>
+
+  <div class="explain">
+    <b>Reading the states.</b> <i>Sustained</i>: above target and holding. <i>Accel recovery</i>: below
+    target but climbing (typical early in a week, before fixed costs are covered). <i>Decelerating</i>:
+    above water but slipping. <i>Stalled</i>: below target and flat. The first week reads −£182/h — six
+    trips against a full week of fixed costs — which is exactly what the metric should say.
+    <br><br>
+    <b>The headline finding:</b> regression across these weeks showed <b>weekly hours, not trip quality,
+    set the ceiling on profitability</b> — the binding constraint was time worked, not cleverness of
+    selection. That result reshaped the working pattern itself.
+  </div>
+
+  <div class="panel">
+    <h3>Weekly detail</h3>
+    <div class="note">Straight from the pipeline's reports/metrics/week_*.json files</div>
+    <div id="tbl"></div>
+  </div>
+
+  <p style="font-size:.85rem"><a href="dashboards/cnhr_dashboard.html">See the original dashboard the
+  pipeline generates →</a></p>
+
+  <footer class="site">Constants: weekly cost £430, target £15/h, EMA α = 0.15, baseline 20.05 h/week.</footer>
+</div>
+<script src="assets/site.js"></script>
+<script>
+getJSON('data/metrics.json').then(m => {
+  const w = m.weekly;
+  const best = w.reduce((a, b) => b.cnhr > a.cnhr ? b : a);
+  document.getElementById('hero').innerHTML =
+    card(w.length, 'weeks measured', 'Dec 2025 – Mar 2026') +
+    card(w.filter(x => x.cnhr >= 15).length + '/' + w.length, 'weeks at target', '£15/h after costs') +
+    card('£' + best.cnhr, 'best week £/h', best.label) +
+    card(fmt(w.reduce((a, b) => a + b.trips, 0)), 'trips scored', 'matched to portal earnings') +
+    card(fmt(w.reduce((a, b) => a + b.hours, 0)) + 'h', 'hours measured', 'paid time');
+  stateChart(document.getElementById('cnhrChart'), w, document.getElementById('cnhrLegend'));
+  document.getElementById('tbl').innerHTML =
+    '<table><tr><th>Week</th><th class="num">Trips</th><th class="num">Earnings</th><th class="num">Hours</th><th class="num">CNHR £/h</th><th>State</th></tr>' +
+    w.map(r => `<tr><td>${r.label}</td><td class="num">${r.trips}</td><td class="num">£${fmt(r.earnings, 2)}</td><td class="num">${r.hours}</td><td class="num">${fmt(r.cnhr, 2)}</td><td>${r.state}</td></tr>`).join('') +
+    '</table>';
+});
+</script>
+</body>
+</html>

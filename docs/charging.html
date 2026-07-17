@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EV running costs — ride-share metrics</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <h1>EV running costs</h1>
+    <p class="sub">The cost side of every profitability number on this site — parsed out of charging
+    invoices by AI rather than typed in by hand.</p>
+  </header>
+
+  <div class="explain">
+    <b>Why it matters.</b> An hourly rate “after costs” is only as honest as the cost data. Driving an
+    electric vehicle for ride-share means dozens of charging sessions a month across different networks
+    (Tesla Superchargers, Believ, bp pulse, Smoov), each with its own invoice format — PDFs, app
+    screenshots, VAT receipts. <b>uber_charging</b> feeds each document to Claude, which reads it directly
+    (no brittle OCR templates) and emits a structured session record: kWh, cost, location, time. The
+    aggregate — about <b>£89/week</b> — flows into the £430/week fixed-cost figure the metrics engine
+    normalises against. Congestion-charge fees and idle-time penalties are caught too.
+  </div>
+
+  <div class="cards" id="hero"></div>
+
+  <div class="row2">
+    <div class="panel"><h3>Energy per week (kWh)</h3><div class="note">17 weeks of charging</div><div id="wk"></div></div>
+    <div class="panel"><h3>By provider</h3><div class="note">Cost incl. VAT</div><div id="prov"></div></div>
+  </div>
+
+  <div class="panel">
+    <h3>When charging happens</h3>
+    <div class="note">Session count by time of day — overnight charging is cheapest</div>
+    <div id="tod"></div>
+  </div>
+
+  <footer class="site">Tool: Python CLI over the Anthropic API, per-file extraction cache, 82 sessions
+  across 19 locations and 4 providers.</footer>
+</div>
+<script src="assets/site.js"></script>
+<script>
+getJSON('data/charging.json').then(c => {
+  document.getElementById('hero').innerHTML =
+    card(fmt(c.sessions), 'sessions', c.period[0] + ' → ' + c.period[1]) +
+    card(fmt(c.kwh), 'kWh delivered', 'across 4 networks') +
+    card('£' + fmt(c.cost), 'total cost', '£' + c.avg_cost_kwh.toFixed(2) + '/kWh average') +
+    card('£' + fmt(c.per_week_cost), 'per week', 'feeds the £430/wk cost model');
+  barChart(document.getElementById('wk'),
+    Object.entries(c.by_week).map(([k, v]) => ({ label: k, short: k.slice(5), v: v.kwh })), {});
+  document.getElementById('prov').innerHTML =
+    '<table><tr><th>Provider</th><th class="num">Sessions</th><th class="num">kWh</th><th class="num">Cost</th></tr>' +
+    Object.entries(c.providers).map(([k, v]) =>
+      `<tr><td>${k}</td><td class="num">${v.sessions}</td><td class="num">${fmt(v.kwh)}</td><td class="num">£${fmt(v.cost, 2)}</td></tr>`).join('') +
+    '</table>';
+  barChart(document.getElementById('tod'),
+    Object.entries(c.by_time).map(([k, v]) => ({ label: k, short: k.split(' ')[0], v: v.sessions })), {});
+});
+</script>
+</body>
+</html>
