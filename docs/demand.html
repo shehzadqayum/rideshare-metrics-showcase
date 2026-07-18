@@ -24,6 +24,8 @@
   .mult { text-align:center; min-width:66px; }
   .mult .v { font-size:1.3rem; font-weight:700; }
   .mult .l { font-size:.64rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .grp { font-size:.72rem; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--muted);
+    margin:18px 0 6px; }
 </style>
 </head>
 <body>
@@ -37,16 +39,16 @@
   <div class="explain">
     <b>The idea.</b> Ride-share pricing “surges” when demand outstrips drivers, and London demand is largely
     created by identifiable events: a Tube line down, 60,000 people leaving a football match, planes landing
-    at Heathrow, rain. <b>Sentinel</b> polls Transport for London (ten endpoints), National Rail, football
-    fixtures, Ticketmaster events and Met Office weather on a loop, scores each hour, and produces the
-    forecast below. Two things are shown: <b>the forecast the system generates</b>, and <b>the live feeds it
-    is built from</b>.
+    at Heathrow, rain. <b>Sentinel</b> polls ~30 endpoints across six providers — Transport for London,
+    National Rail, airport arrivals, football fixtures, ticketed events and Met Office weather — scores each
+    hour, and produces the forecast below. This page shows <b>the forecast the system generates</b>, <b>the
+    continuous logging session</b>, and <b>every metric of every daily capture</b>.
   </div>
 
   <h2>Surge forecast <span id="fcTitle" style="font-size:.72rem;color:var(--muted);font-weight:500"></span></h2>
   <div class="explain">
-    Each hour of the day is scored per signal — aviation, football, events, transport disruption, weather —
-    and combined into a composite. Darker = stronger predicted surge. This is a real generated example;
+    Each hour is scored per signal — aviation, football, events, transport disruption, weather — and combined
+    into a composite. Darker = stronger predicted surge. This is a real generated example;
     <a id="fullReport" href="dashboards/surge_report.html">open the full report</a> for the complete write-up.
   </div>
   <div class="panel">
@@ -55,10 +57,8 @@
     <div class="heat-wrap"><div class="heat" id="heat"></div></div>
     <div class="legend" id="heatLegend" style="margin-top:10px"></div>
   </div>
-
   <h3 style="margin:22px 0 0;font-size:.98rem">Priority surge windows</h3>
   <div class="swin" id="windows"></div>
-
   <div class="row2">
     <div class="panel"><h3>Recommended positioning</h3><div class="note">Optimised shift plan for the day</div>
       <div id="strategy"></div></div>
@@ -66,13 +66,9 @@
       <div id="conditions"></div></div>
   </div>
 
-  <h2>The live feeds behind it</h2>
-  <div class="explain">
-    The forecast is only as good as the data under it. Below is what Sentinel actually captured: a
-    continuous logging session, and full multi-source snapshots across several days.
-  </div>
-
-  <h3 style="margin:16px 0 0;font-size:.95rem">Continuous polling session — <span id="sessTitle"></span></h3>
+  <h2>Continuous polling session — <span id="sessTitle"></span></h2>
+  <div class="explain">The daemon's core job: sampling the whole TfL network every few minutes and writing
+    each cycle to SQLite. The network-health line moves as disruptions appear and clear.</div>
   <div class="cards" id="sessCards"></div>
   <div class="panel">
     <h3>Network health across the session (%)</h3>
@@ -80,25 +76,44 @@
     <div id="sessChart"></div>
   </div>
 
-  <h3 style="margin:16px 0 0;font-size:.95rem">Daily snapshots — <span id="capCount"></span></h3>
-  <div class="explain" style="border-left-color:var(--s2)">A quick health overview below; the
-    <a href="snapshots.html">Snapshots page</a> shows every metric for every capture — line disruptions,
-    cycle hire, EV charge points, air quality, aviation, rail punctuality, events and weather.</div>
+  <h2>Daily captures — <span id="capCount"></span></h2>
+  <div class="explain">Every metric of every capture Sentinel saved. Pick a day: the full multi-source state
+    is shown below. Provider coverage grows over time — earlier snapshots hold fewer feeds, and each panel
+    flags what wasn't collected.</div>
   <div class="panel">
-    <h3>Tube / rail health by snapshot (%)</h3>
-    <div class="note">Click a bar or button to open that snapshot.</div>
+    <h3>Tube / rail health by capture (%)</h3>
+    <div class="note">Click a bar or a button to open that capture's full metrics.</div>
     <div id="capChart"></div>
   </div>
   <div class="controls" id="capBtns"></div>
-  <div class="cards" id="capCards"></div>
-  <div class="panel">
-    <h3>Tube / rail line status</h3>
-    <div class="note" id="capTs"></div>
-    <div class="linelist" id="capLines"></div>
+  <div class="cards" id="head"></div>
+
+  <div class="grp">Transport for London</div>
+  <div class="cards" id="tflCards"></div>
+  <div class="panel"><h3>Tube / rail line status</h3><div class="note" id="lsNote"></div>
+    <div class="linelist" id="lines"></div></div>
+  <div class="panel"><h3>Active line disruptions</h3><div id="ld"></div></div>
+
+  <div class="grp">Getting around — cycle hire · EV charging · air</div>
+  <div class="cards" id="aroundCards"></div>
+
+  <div class="row2">
+    <div class="panel"><h3>Aviation — airport arrivals</h3><div class="note">AirLabs feed</div><div id="aviation"></div></div>
+    <div class="panel"><h3>National Rail punctuality</h3><div class="note">Departure boards, 10 stations</div><div id="rail"></div></div>
   </div>
 
+  <div class="grp">Events &amp; fixtures</div>
+  <div class="cards" id="evtCards"></div>
+  <div class="row2">
+    <div class="panel"><h3>London football fixtures</h3><div id="fix" style="font-size:.82rem;color:var(--ink2);line-height:1.6"></div></div>
+    <div class="panel"><h3>Events in the next 6 hours</h3><div id="evt6" style="font-size:.82rem;color:var(--ink2);line-height:1.6"></div></div>
+  </div>
+
+  <div class="grp">Weather</div>
+  <div class="cards" id="wxCards"></div>
+
   <footer class="site">Data: docs/data/demand.json — Sentinel's generated surge report (forecast), its SQLite
-  log (session) and saved multi-source snapshots (captures). Nothing mocked.</footer>
+  log (session) and every saved multi-source capture. Nothing mocked.</footer>
 </div>
 <script src="assets/site.js"></script>
 <script>
@@ -110,6 +125,7 @@ const sev = { 'Good Service': '--good', 'Minor Delays': '--warn', 'Reduced Servi
   'Suspended': '--critical', 'Planned Closure': '--serious' };
 const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const dlabel = d => `${+d.slice(8)} ${MON[+d.slice(5, 7) - 1]}`;
+const na = '<span style="color:var(--muted)">not collected in this capture</span>';
 
 function lineChart(el, pts, opts) {
   const W = 940, H = 210, padL = 42, padB = 34, padT = 14, padR = 14;
@@ -150,7 +166,6 @@ getJSON('data/demand.json').then(D => {
   // ---------- forecast ----------
   if (F) {
     document.getElementById('fcTitle').textContent = '— ' + F.title.replace(/^Surge Report \|\s*/, '');
-    document.getElementById('fullReport').href = 'dashboards/surge_report.html';
     const heat = document.getElementById('heat');
     let h = '<div></div>' + F.hours.map(x => `<div class="h">${x}</div>`).join('');
     F.heatmap.forEach(row => {
@@ -161,7 +176,6 @@ getJSON('data/demand.json').then(D => {
     heat.innerHTML = h; bindTips(heat);
     document.getElementById('heatLegend').innerHTML = HEATNAME.map((n, i) =>
       `<span><span class="sw" style="background:${HEAT[i]}"></span>${n}</span>`).join('');
-
     document.getElementById('windows').innerHTML = F.windows.map(w => `
       <div class="panel card" style="margin:0">
         <div class="rank" style="border-color:${MULTCOL[w.mcolor]};color:${MULTCOL[w.mcolor]}">${w.rank}</div>
@@ -169,17 +183,15 @@ getJSON('data/demand.json').then(D => {
           <div class="tags">${w.tags.map(t => `<span class="tag">${t}</span>`).join('')}</div></div>
         <div class="mult"><div class="v" style="color:${MULTCOL[w.mcolor]}">${w.mult}</div><div class="l">est. surge</div></div>
       </div>`).join('');
-
     document.getElementById('strategy').innerHTML = F.strategy.length ?
       '<table><tr><th>Time</th><th>Position</th><th>Target</th><th class="num">Mult.</th></tr>' +
       F.strategy.map(r => `<tr><td>${r.time}</td><td>${r.location}</td><td style="color:var(--ink2)">${r.target}</td><td class="num">${r.mult}</td></tr>`).join('') + '</table>' : '';
-
     document.getElementById('conditions').innerHTML = F.conditions.length ?
       '<table><tr><th>System</th><th>Status</th></tr>' +
       F.conditions.map(c => `<tr><td><b>${c.system}</b></td><td style="color:var(--ink2)">${c.status}</td></tr>`).join('') + '</table>' : '';
   }
 
-  // ---------- live session ----------
+  // ---------- session ----------
   document.getElementById('sessTitle').textContent = `${dlabel(S.date)} 2026, ${S.window[0]}–${S.window[1]}`;
   document.getElementById('sessCards').innerHTML =
     card(S.cycles, 'polling cycles', 'every ~5 min') +
@@ -187,35 +199,78 @@ getJSON('data/demand.json').then(D => {
     card(fmt(S.road_locations), 'road disruptions', 'distinct locations') +
     card(fmt(S.arrival_events), 'train arrivals logged', `${S.arrival_stations} key stations`);
   const dv = S.series.map(p => p.disrupted);
-  document.getElementById('sessNote').textContent =
-    `Across all ${S.series[0].total} TfL lines/routes · disrupted ${Math.min(...dv)}–${Math.max(...dv)}`;
+  document.getElementById('sessNote').textContent = `Across all ${S.series[0].total} TfL lines/routes · disrupted ${Math.min(...dv)}–${Math.max(...dv)}`;
   lineChart(document.getElementById('sessChart'),
     S.series.map(p => ({ t: p.t, y: p.health, label: `${p.t} — ${p.health}% · ${p.disrupted} of ${p.total} disrupted` })), { suf: '%' });
 
-  // ---------- captures ----------
-  document.getElementById('capCount').textContent = `${C.length} snapshots across ${new Set(C.map(c => c.date)).size} days`;
+  // ---------- captures (full per-day metrics) ----------
+  document.getElementById('capCount').textContent = `${C.length} captures across ${new Set(C.map(c => c.date)).size} days`;
   capBarChart(document.getElementById('capChart'), C, select);
   const btns = document.getElementById('capBtns');
   btns.innerHTML = C.map((c, i) => `<button data-i="${i}">${dlabel(c.date)} ${c.time}</button>`).join('');
   btns.querySelectorAll('button').forEach(b => b.addEventListener('click', () => select(+b.dataset.i)));
+
   function select(i) {
     const c = C[i];
     btns.querySelectorAll('button').forEach((b, j) => b.classList.toggle('on', j === i));
-    document.getElementById('capCards').innerHTML =
+    document.getElementById('head').innerHTML =
+      card(dlabel(c.date), 'capture', c.time + ' · ' + c.sources.length + ' providers') +
       card((c.health != null ? c.health + '%' : '—'), 'tube/rail health', `${c.disrupted} of ${c.total} disrupted`) +
-      card(fmt(c.road), 'road disruptions', 'TfL road network') +
+      card(fmt(c.arrivals), 'live train arrivals', `${c.arrival_stations ?? '?'} stations`);
+
+    document.getElementById('tflCards').innerHTML =
+      card(fmt(c.road), 'road disruptions', Object.entries(c.road_by_severity || {}).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(' · ') || 'TfL road network') +
       card(fmt(c.station), 'station issues', `${c.closures ?? 0} closures`) +
-      card(fmt(c.arrivals), 'live arrivals', `${c.arrival_stations ?? '?'} stations`) +
-      card((c.events != null ? fmt(c.events) : '—'), 'events tracked', 'Ticketmaster') +
-      card((c.temp != null ? c.temp.toFixed(0) + '°C' : '—'), 'weather', 'Met Office') +
-      card((c.football_london ?? 0), 'London fixtures', `${c.football_total ?? '?'} nationwide`);
-    document.getElementById('capTs').textContent = `Captured ${c.date} ${c.time} · sources: ${c.sources.join(', ')}`;
-    document.getElementById('capLines').innerHTML = c.lines.map(l =>
+      card(c.line_disruptions.length, 'line disruptions', 'active advisories');
+    document.getElementById('lsNote').textContent = c.lines.length ? `${c.lines.length} lines monitored` : '';
+    document.getElementById('lines').innerHTML = c.lines.length ? c.lines.map(l =>
       `<div class="lineitem" ${l.reason ? `title="${l.reason.replace(/"/g, '&quot;')}"` : ''}><span>${l.name}</span>
-       <span class="status" style="color:var(${sev[l.status] || '--muted'})">${l.status}</span></div>`).join('');
+       <span class="status" style="color:var(${sev[l.status] || '--muted'})">${l.status}</span></div>`).join('') : na;
+    document.getElementById('ld').innerHTML = c.line_disruptions.length ? c.line_disruptions.map(l =>
+      `<div style="margin-bottom:8px"><b style="color:var(--ink)">${l.line}</b> — <span style="color:var(${sev[l.status] || '--muted'})">${l.status}</span><br><span style="color:var(--muted)">${l.reason}</span></div>`).join('')
+      : '<span style="color:var(--muted)">no active line disruptions in this capture</span>';
+
+    document.getElementById('aroundCards').innerHTML =
+      (c.bikes ? card(fmt(c.bikes.bikes), 'Santander bikes', `${c.bikes.pct}% of ${fmt(c.bikes.docks)} docks free`) : card('—', 'Santander bikes', 'not collected')) +
+      (c.ev ? card(`${c.ev.available}/${c.ev.total}`, 'EV charge points free', `${c.ev.pct}% available`) : card('—', 'EV charge points', 'not collected')) +
+      (c.air ? card(c.air.index, 'air quality', (c.air.summary || '').slice(0, 60)) : card('—', 'air quality', 'not collected')) +
+      card(c.car_parks_outage ? 'outage' : '—', 'TfL car parks', c.car_parks_outage ? 'upstream HTTP 500' : 'not collected');
+
+    document.getElementById('aviation').innerHTML = c.aviation ?
+      `<div class="cards" style="margin:0">
+        ${card(fmt(c.aviation.arrivals), 'arrivals this hour', `${fmt(c.aviation.international)} intl · ${fmt(c.aviation.domestic)} dom`)}
+        ${card(c.aviation.surge_rating || '—', 'aviation surge', 'AirLabs forecast')}
+        ${card(fmt(c.aviation.cancellations), 'cancellations', `${fmt(c.aviation.delays)} delays`)}
+      </div>` + (c.aviation.peaks.length ? '<div style="font-size:.82rem;color:var(--ink2);margin-top:8px">Upcoming peaks: ' +
+        c.aviation.peaks.map(p => `${p.hour}:00 (${fmt(p.total)})`).join(', ') + '</div>' : '') : na;
+
+    document.getElementById('rail').innerHTML = c.rail ?
+      `<div class="cards" style="margin:0">
+        ${card(c.rail.services != null ? Math.round(100 * c.rail.on_time / c.rail.services) + '%' : '—', 'on time', `${c.rail.on_time}/${c.rail.services} services`)}
+        ${card(fmt(c.rail.avg_delay) + ' min', 'avg delay', `${c.rail.delayed} delayed · ${c.rail.cancelled} cancelled`)}
+        ${card(fmt(c.rail.incidents), 'active incidents', 'National Rail')}
+      </div>` : na;
+
+    document.getElementById('evtCards').innerHTML =
+      card(fmt(c.events), 'ticketed events', Object.entries(c.events_by_type || {}).slice(0, 3).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(' · ') || 'Ticketmaster') +
+      card((c.football_london ?? 0), 'London fixtures', `${c.football_total ?? '?'} nationwide`) +
+      card(c.events_next6.length, 'events next 6h', 'starting soon');
+    document.getElementById('fix').innerHTML = (c.football_list || []).length
+      ? c.football_list.map(f => `<div>${f.home} v ${f.away} <span style="color:var(--muted)">· ${f.comp}</span></div>`).join('') : na;
+    document.getElementById('evt6').innerHTML = (c.events_next6 || []).length
+      ? c.events_next6.map(e => `<div>${e.name} <span style="color:var(--muted)">· ${e.venue}${e.cap ? ' · ' + fmt(e.cap) + ' cap' : ''}</span></div>`).join('') : na;
+
+    const w = c.weather;
+    document.getElementById('wxCards').innerHTML = w ?
+      card((w.temperature != null ? w.temperature.toFixed(1) + '°C' : '—'), 'temperature', w.feels_like != null ? `feels ${w.feels_like.toFixed(0)}°C` : '') +
+      card((w.precipitation_prob != null ? w.precipitation_prob + '%' : '—'), 'rain chance', w.humidity != null ? `${w.humidity.toFixed(0)}% humidity` : '') +
+      card((w.wind_speed != null ? w.wind_speed.toFixed(0) + ' mph' : '—'), 'wind', 'Met Office') +
+      card((w.uv_index != null ? w.uv_index : '—'), 'UV index', w.visibility != null ? `${fmt(w.visibility)} m visibility` : '')
+      : card('—', 'weather', 'not collected');
   }
-  let worst = 0; C.forEach((c, i) => { if ((c.health ?? 100) < (C[worst].health ?? 100)) worst = i; });
-  select(worst);
+
+  let rich = 0; C.forEach((c, i) => { if (c.sources.length >= C[rich].sources.length) rich = i; });
+  select(rich);
 });
 </script>
 </body>

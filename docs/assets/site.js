@@ -10,7 +10,6 @@ const PAGES = [
   ['metrics.html', 'Trip metrics'],
   ['trips.html', 'Earnings'],
   ['demand.html', 'Demand'],
-  ['snapshots.html', 'Snapshots'],
   ['charging.html', 'EV costs'],
 ];
 (function nav() {
