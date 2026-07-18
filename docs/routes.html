@@ -57,7 +57,7 @@
 <script src="assets/site.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-let DATA, map, layer, mode = 'seg';
+let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
 const segColor = { trip: '#2a78d6', enroute: '#8a8a85', deadhead: '#e34948' };
 const svcColor = { UBERX: '#2a78d6', ELECTRIC: '#1baf7a', COMFORT: '#eda100', UBERX_RESERVE: '#4a3aa7', UBERX_PRIORITY: '#eb6834' };
 // £/mile value ramp — distinct hues (red=low earnings/mi → green=high), all readable on a light basemap
@@ -90,9 +90,14 @@ function legend() {
 
 function render() {
   const day = document.getElementById('daySel').value;
-  const feats = day === 'ALL'
+  let feats = day === 'ALL'
     ? Object.values(DATA.days).flatMap(d => d.features)
     : DATA.days[day].features;
+  // isolate a single trip (both its enroute + paid segments) when one is clicked
+  if (isolated) {
+    const iso = feats.filter(f => f.properties.trip === isolated);
+    if (iso.length) feats = iso; else isolated = null;
+  }
   if (layer) layer.remove();
   layer = L.geoJSON({ type: 'FeatureCollection', features: feats }, {
     style: f => styleFor(f.properties),
@@ -103,14 +108,29 @@ function render() {
         `${p.from || '?'} → ${p.to || '?'}<br>` +
         `${p.mi ?? '?'} mi · ${p.min ?? '?'} min · ${p.mph ?? '?'} mph` +
         (p.gbp != null ? `<br>£${p.gbp.toFixed(2)}${ppm}` : ''), { sticky: true });
+      l.on('click', e => {
+        L.DomEvent.stopPropagation(e);
+        lastFeatureClick = Date.now();
+        isolated = (isolated === p.trip) ? null : p.trip;
+        render();
+      });
     }
   }).addTo(map);
-  if (feats.length) map.fitBounds(layer.getBounds(), { padding: [20, 20] });
-  const trips = feats.filter(f => f.properties.seg === 'trip');
-  const mi = feats.reduce((a, f) => a + (f.properties.mi || 0), 0);
-  const gbp = trips.reduce((a, f) => a + (f.properties.gbp || 0), 0);
-  document.getElementById('stats').textContent =
-    `${trips.length} trips · ${fmt(mi)} mi tracked · £${fmt(gbp)} on shown trips`;
+  if (feats.length) map.fitBounds(layer.getBounds(), { padding: [30, 30], maxZoom: isolated ? 15 : 13 });
+  const stats = document.getElementById('stats');
+  if (isolated) {
+    const t = feats.find(f => f.properties.seg === 'trip') || feats[0];
+    const p = t.properties;
+    const ppm = p.gbp && p.mi ? ` · £${(p.gbp / p.mi).toFixed(2)}/mi` : '';
+    stats.innerHTML = `<b>Isolated trip</b> — ${p.from || '?'} → ${p.to || '?'} · ${p.mi ?? '?'} mi` +
+      (p.gbp != null ? ` · £${p.gbp.toFixed(2)}${ppm}` : '') +
+      ` &nbsp;<span style="color:var(--s1)">click empty map to show all</span>`;
+  } else {
+    const trips = new Set(feats.filter(f => f.properties.seg === 'trip').map(f => f.properties.trip)).size;
+    const mi = feats.reduce((a, f) => a + (f.properties.mi || 0), 0);
+    const gbp = feats.filter(f => f.properties.seg === 'trip').reduce((a, f) => a + (f.properties.gbp || 0), 0);
+    stats.textContent = `${trips} trips · ${fmt(mi)} mi tracked · £${fmt(gbp)} · click a route to isolate it`;
+  }
   legend();
 }
 
@@ -142,7 +162,11 @@ getJSON('data/routes.json').then(d => {
   map = L.map('map', { scrollWheelZoom: true }).setView([51.52, -0.08], 11);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
     { attribution: '© OpenStreetMap, © CARTO', maxZoom: 19 }).addTo(map);
-  sel.addEventListener('change', render);
+  // click empty map to clear an isolated trip (ignore the click that did the isolating)
+  map.on('click', () => {
+    if (isolated && Date.now() - lastFeatureClick > 60) { isolated = null; render(); }
+  });
+  sel.addEventListener('change', () => { isolated = null; render(); });
   document.querySelectorAll('.controls button').forEach(b =>
     b.addEventListener('click', () => {
       document.querySelectorAll('.controls button').forEach(x => x.classList.remove('on'));
