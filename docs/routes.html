@@ -16,13 +16,15 @@
   </header>
 
   <div class="explain">
-    <b>What am I looking at?</b> Ride-share work has three kinds of movement: <b>en-route</b> (driving to
-    collect a passenger — unpaid), the <b>trip</b> itself (paid), and <b>deadhead</b> (repositioning with no
-    job). The pipeline stitches each day's screenshots and GPS into these segments, then attaches the
-    numbers: distance, duration, average speed, and what the trip paid. Hover any line to see them.
-    Colouring by <i>£ per mile</i> shows instantly why trip selection matters — visually, not as a
-    spreadsheet. Addresses are reduced to area level (e.g. “London N4”) for privacy.
+    <b>What am I looking at?</b> Ride-share work has two kinds of movement per job: the <b>en-route</b> leg
+    (driving to collect the passenger — unpaid) and the <b>trip</b> itself (paid). Each line here is one such
+    segment, reconstructed by matching the phone's raw GPS track to the trip's start and end times, then
+    tagged with its distance, duration, average speed and fare. Hover any line to see them. Colouring by
+    <i>£ per mile</i> shows instantly why trip selection matters — visually, not as a spreadsheet.
+    Addresses are reduced to area level (e.g. “London N4”) for privacy.
   </div>
+
+  <div class="explain" id="coverage" style="border-left-color:var(--s3)"></div>
 
   <div class="controls">
     <label>Day:
@@ -45,13 +47,12 @@
       (blue) share of total driving is the “utilisation” the metrics page prices in.</li>
       <li><b>£ per mile</b> — short central London hops often out-earn long motorway runs per mile;
       the gradient makes the good and bad corridors obvious.</li>
-      <li><b>Coverage</b> — 20 tracked days spanning inner and outer London, airports to suburbs,
-      day and night shifts.</li>
+      <li><b>Coverage</b> — spanning inner and outer London, airports to suburbs, day and night shifts.</li>
     </ul>
   </div>
 
-  <footer class="site">Data: docs/data/routes.json, extracted from the pipeline's per-day generated maps.
-  Map tiles © OpenStreetMap contributors.</footer>
+  <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
+  matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </div>
 <script src="assets/site.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -114,6 +115,17 @@ function render() {
 
 getJSON('data/routes.json').then(d => {
   DATA = d;
+  const cov = d.coverage;
+  if (cov) {
+    const gpsWeeks = cov.weeks.filter(w => w.gps > 0);
+    const span = Object.keys(d.days).sort();
+    const dfmt = s => `${s.slice(6)} ${['Jan','Feb','Mar','Apr'][+s.slice(4,6)-1]}`;
+    document.getElementById('coverage').innerHTML =
+      `<b>Coverage &amp; honesty note.</b> GPS route capture ran <b>${dfmt(span[0])} – ${dfmt(span[span.length-1])} 2026</b>. ` +
+      `Of ${cov.total_trips} total trips, <b>${cov.gps_trips} have a GPS route</b> shown here, across ${gpsWeeks.length} weeks. ` +
+      `The remaining trips — mostly December, early January and mid-to-late March — were reconstructed from the Uber portal only, ` +
+      `with the GPS tracker not running, so no route exists to draw. Nothing is invented; a trip with no recorded track simply isn't plotted.`;
+  }
   const sel = document.getElementById('daySel');
   Object.keys(d.days).sort().forEach(k => {
     const o = document.createElement('option');

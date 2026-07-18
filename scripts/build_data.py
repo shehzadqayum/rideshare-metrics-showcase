@@ -78,38 +78,12 @@ def area(addr):
     loc = re.sub(r'\b[A-Z]{1,2}[0-9][0-9A-Z]?\s*[0-9]?[A-Z]{0,2}\b', '', loc).strip() or 'London'
     return f'{loc} {out}'.strip()
 
-days = {}
-kept = dropped = 0
-for f in sorted(glob.glob(BASE + '/uber_screen/reports/maps/trips_*.html')):
-    date = re.search(r'trips_(\d{8})', f).group(1)
-    gj = extract_geojson(f)
-    if not gj:
-        continue
-    feats = []
-    for feat in gj.get('features', []):
-        p = feat.get('properties', {})
-        g = feat.get('geometry', {})
-        if g.get('type') != 'LineString':
-            dropped += 1
-            continue
-        coords = [[round(c[0], 5), round(c[1], 5)] for c in g.get('coordinates', [])[::3]]  # thin 3:1
-        if len(coords) < 2:
-            dropped += 1
-            continue
-        earn = p.get('earnings') or ''
-        earn_val = float(re.sub(r'[^0-9.]', '', earn)) if re.search(r'[0-9]', earn) else None
-        feats.append({'type': 'Feature', 'geometry': {'type': 'LineString', 'coordinates': coords},
-                      'properties': {
-                          'seg': p.get('segment_type'), 'trip': p.get('trip_id'),
-                          'mi': p.get('distance_miles'), 'min': p.get('duration_minutes'),
-                          'mph': p.get('avg_speed_mph'), 'gbp': earn_val,
-                          'service': p.get('service_type'),
-                          'from': area(p.get('pickup_street')), 'to': area(p.get('dropoff_street'))}})
-        kept += 1
-    if feats:
-        days[date] = {'type': 'FeatureCollection', 'features': feats}
-write('routes.json', {'days': days})
-print(f'  routes: {len(days)} days, {kept} segments kept, {dropped} skipped')
+# NOTE: routes.json is NOT built here anymore. The daily-map GeoJSON is incomplete
+# (it misses whole GPS weeks and the 11/13 Feb polyline-format days). routes.json is
+# now produced by scripts/build_routes_from_gpx.py, which re-extracts every trip's
+# route directly from the raw GPX tracker logs. Run that script for routes; this one
+# only builds trips/metrics/demand/charging. The extract_geojson/area helpers above
+# are retained for reference.
 
 # ---------------------------------------------------------------- demand (Sentinel snapshot)
 d = json.load(open(BASE + '/uber_surge/data/live.json', encoding='utf-8'))
