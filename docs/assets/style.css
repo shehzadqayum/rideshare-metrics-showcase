@@ -17,40 +17,11 @@
 body { background:var(--page); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
   padding:0 0 60px; line-height:1.45; }
 .wrap { max-width:1080px; margin:0 auto; padding:0 20px; }
-nav.site { border-bottom:1px solid var(--border); background:var(--surface); position:sticky; top:0; z-index:5; }
-nav.site .wrap { display:flex; gap:4px; align-items:center; flex-wrap:wrap; padding:10px 20px; }
-nav.site .brand { font-weight:650; margin-right:14px; font-size:.95rem; }
-nav.site a { color:var(--ink2); text-decoration:none; font-size:.85rem; padding:5px 10px; border-radius:7px; }
-nav.site a:hover { background:var(--page); }
-nav.site a.on { color:var(--ink); background:var(--page); font-weight:600; }
-nav.site a.brand { color:var(--ink); font-weight:650; font-size:.95rem; padding:5px 0; }
-nav.site a.brand:hover { background:transparent; }
 
 /* generated-reports dropdown */
-nav.site .navdd { position:relative; }
-nav.site .ddbtn { font:inherit; font-size:.85rem; color:var(--ink2); background:var(--page);
-  border:1px solid var(--border); border-radius:8px; padding:5px 11px; cursor:pointer;
-  display:inline-flex; align-items:center; gap:6px; }
-nav.site .ddbtn:hover { color:var(--ink); border-color:var(--s1); }
-nav.site .ddbtn.on { color:var(--ink); border-color:var(--s1); font-weight:600; }
-nav.site .ddbtn .chev { font-size:.7rem; color:var(--muted); }
-nav.site .ddmenu { position:absolute; right:0; top:calc(100% + 7px); min-width:260px; display:none;
-  background:var(--surface); border:1px solid var(--border); border-radius:11px; padding:6px;
-  box-shadow:0 10px 28px rgba(0,0,0,.18); z-index:30; }
-nav.site .ddmenu.open { display:block; }
-nav.site .ddmenu a { display:block; padding:8px 11px; border-radius:8px; }
-nav.site .ddmenu a:hover { background:var(--page); }
-nav.site .ddmenu a b { display:block; color:var(--ink); font-size:.85rem; font-weight:600; }
-nav.site .ddmenu a span { display:block; color:var(--muted); font-size:.74rem; margin-top:1px; }
-nav.site .ddmenu a.on { background:var(--page); }
-@media (max-width:700px) {
-  nav.site .wrap { gap:2px; }
-  nav.site a { padding:5px 7px; font-size:.8rem; }
-  nav.site .ddmenu { right:auto; left:0; }
-}
 header.page { margin:30px 0 6px; }
 h1 { font-size:1.45rem; font-weight:650; letter-spacing:-.01em; }
-.sub { color:var(--ink2); margin-top:8px; font-size:.93rem; max-width:76ch; }
+.sub { color:var(--ink2); margin-top:8px; font-size:.93rem; }
 h2 { font-size:1.02rem; font-weight:650; margin:30px 0 4px; }
 .explain { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--s1);
   border-radius:10px; padding:14px 16px; margin:16px 0; font-size:.88rem; color:var(--ink2); max-width:100%; }

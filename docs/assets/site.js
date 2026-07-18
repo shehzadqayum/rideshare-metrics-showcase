@@ -4,53 +4,10 @@ const fmt = (n, dp = 0) => n == null ? '—' : n.toLocaleString('en-GB', { minim
 const card = (v, l, d) => `<div class="card"><div class="v">${v}</div><div class="l">${l}</div>${d ? `<div class="d">${d}</div>` : ''}</div>`;
 
 // ---- nav ----
-// site sections, shown inline
-const PAGES = [
-  ['index.html', 'Overview'],
-  ['framework.html', 'Framework'],
-  ['routes.html', 'Routes'],
-  ['metrics.html', 'Trip metrics'],
-  ['trips.html', 'Earnings'],
-  ['demand.html', 'Demand'],
-  ['charging.html', 'EV costs'],
-];
-// pipeline-generated artifacts, grouped in a dropdown
-const REPORTS = [
-  ['dashboards/cnhr_dashboard.html', 'CNHR–MNHR dashboard', '17 weeks · 762 trips'],
-  ['dashboards/cnhr_week_20260209.html', 'Single-week deep dive', 'week of 9 Feb 2026'],
-  ['dashboards/surge_report.html', 'Surge intelligence report', 'hourly forecast'],
-];
-(function nav() {
-  const here = location.pathname.split('/').pop() || 'index.html';
-  // pages inside /dashboards must climb a level to reach the site pages
-  const up = /\/dashboards\//.test(location.pathname) ? '../' : '';
-  const isReport = REPORTS.some(([h]) => h.split('/').pop() === here);
-  const el = document.createElement('nav');
-  el.className = 'site';
-  el.innerHTML = `<div class="wrap">` +
-    `<a class="brand" href="${up}index.html">Ride-share metrics</a>` +
-    PAGES.map(([h, t]) => `<a href="${up}${h}" class="${h === here ? 'on' : ''}">${t}</a>`).join('') +
-    `<span style="flex:1"></span>` +
-    `<div class="navdd">` +
-      `<button class="ddbtn${isReport ? ' on' : ''}" id="ddbtn" aria-haspopup="true" aria-expanded="false">Generated reports <span class="chev">▾</span></button>` +
-      `<div class="ddmenu" id="ddmenu" style="display:none">` +
-        REPORTS.map(([h, t, s]) =>
-          `<a href="${up}${h}" class="${h.split('/').pop() === here ? 'on' : ''}"><b>${t}</b><span>${s}</span></a>`).join('') +
-      `</div></div></div>`;
-  document.body.prepend(el);
-  const btn = el.querySelector('#ddbtn'), menu = el.querySelector('#ddmenu');
-  // drive visibility inline so the menu still works if a stale stylesheet is cached
-  const close = () => { menu.style.display = 'none'; menu.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); };
-  btn.addEventListener('click', e => {
-    e.stopPropagation();
-    const open = menu.style.display !== 'block';
-    menu.style.display = open ? 'block' : 'none';
-    menu.classList.toggle('open', open);
-    btn.setAttribute('aria-expanded', String(open));
-  });
-  menu.addEventListener('click', e => e.stopPropagation());
-  document.addEventListener('click', close);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+// The quick-links toolbar now lives in assets/nav.js (shared by every page,
+// including the dark generated dashboards). This file keeps the tooltip host.
+(function tipHost(){
+  if (document.getElementById('tip')) return;
   const tip = document.createElement('div');
   tip.id = 'tip';
   document.body.append(tip);

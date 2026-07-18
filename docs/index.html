@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ride-share metrics — a working showcase</title>
-<link rel="stylesheet" href="assets/style.css?v=3">
+<link rel="stylesheet" href="assets/style.css?v=5">
 <style>
   .tile.artifact { border-left:3px solid var(--s1); }
   .tile .go { margin-top:9px; font-size:.78rem; font-weight:600; color:var(--s1); }
@@ -112,7 +112,7 @@
   <footer class="site">Built with AI-assisted development (Claude Code). All figures are real, drawn from
   the projects' own report files. Passenger names are removed and addresses reduced to area level.</footer>
 </div>
-<script src="assets/site.js?v=3"></script>
+<script src="assets/site.js?v=5"></script>
 <script>
 Promise.all([getJSON('data/trips.json'), getJSON('data/charging.json'), getJSON('data/routes.json'), getJSON('data/metrics.json')])
 .then(([t, c, r, m]) => {
@@ -126,5 +126,6 @@ Promise.all([getJSON('data/trips.json'), getJSON('data/charging.json'), getJSON(
     card(m.weekly.filter(w => w.cnhr >= 15).length + '/' + m.weekly.length, 'weeks at target rate', '£15/h after costs');
 });
 </script>
+<script src="assets/nav.js?v=5"></script>
 </body>
 </html>
