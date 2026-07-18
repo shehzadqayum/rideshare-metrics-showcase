@@ -190,8 +190,8 @@ getJSON('data/demand.json').then(D => {
     document.getElementById('mapWhen').textContent = `— ${dlabel(c.date)} ${c.time}`;
     if (heatLayer) map.removeLayer(heatLayer);
     heatLayer = L.heatLayer((c.road_points || []).map(p => [p[0], p[1], p[2]]),
-      { radius: 22, blur: 16, minOpacity: 0.08, max: 1.5,
-        gradient: { 0.08: '#2c7bb6', 0.25: '#3fa3d1', 0.45: '#3fa34d', 0.62: '#f5c542', 0.8: '#f59e42', 1.0: '#f5564a' } });
+      { radius: 28, blur: 18, minOpacity: 0.4, max: 1.1,
+        gradient: { 0.15: '#2c7bb6', 0.35: '#3fa34d', 0.55: '#f5c542', 0.75: '#f59e42', 1.0: '#f5564a' } });
     if (heatOn) heatLayer.addTo(map);
     markerGroup.clearLayers();
     // road-disruption markers (smallest, under everything)
