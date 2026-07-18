@@ -61,8 +61,8 @@
         <h4>Markers <span style="font-weight:400;text-transform:none">— hover for detail</span></h4>
         <div class="hs"><span class="dot" style="background:#4da6ff"></span>Airport arrivals</div>
         <div class="hs"><span class="dot" style="background:#44d488"></span>Football venue (near-term)</div>
-        <div class="hs"><span class="dot" style="background:#b07aff"></span>Rail terminus</div>
-        <div class="hs"><span class="dot" style="width:8px;height:8px;background:#f5564a"></span>Road disruption</div>
+        <div class="hs"><span class="dot" style="background:#7c3aed"></span>Rail terminus</div>
+        <div class="hs"><span class="dot" style="background:#e11d48"></span>Road disruption</div>
         <h4 style="margin-top:12px">Road congestion</h4>
         <div class="hs"><span style="width:70px;height:11px;border-radius:3px;flex:0 0 auto;background:linear-gradient(90deg,#2c7bb6,#3fa34d,#f5c542,#f59e42,#f5564a)"></span>low → high density</div>
         <label class="hs" style="cursor:pointer;margin-top:8px"><input type="checkbox" id="heatToggle" checked> show congestion heat</label>
@@ -161,6 +161,8 @@ getJSON('data/demand.json').then(D => {
   map = L.map('map', { scrollWheelZoom: false }).setView([51.505, -0.11], 10);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
     { attribution: '© OpenStreetMap, © CARTO', maxZoom: 18 }).addTo(map);
+  // dedicated pane so markers always render above the heat canvas
+  map.createPane('markers'); map.getPane('markers').style.zIndex = 650;
   markerGroup = L.layerGroup().addTo(map);
   document.getElementById('heatToggle').addEventListener('change', e => {
     heatOn = e.target.checked;
@@ -196,23 +198,23 @@ getJSON('data/demand.json').then(D => {
     markerGroup.clearLayers();
     // road-disruption markers (smallest, under everything)
     (c.road_markers || []).forEach(r => {
-      const col = /Serious|Severe/.test(r.sev) ? '#f5564a' : '#f59e42';
-      L.circleMarker([r.lat, r.lon], { radius: 3.5, color: col, weight: 1, fillColor: col, fillOpacity: 0.7 })
+      const col = /Serious|Severe/.test(r.sev) ? '#e11d48' : '#f59e42';
+      L.circleMarker([r.lat, r.lon], { pane: 'markers', radius: 5, color: '#fff', weight: 2, fillColor: col, fillOpacity: 1 })
         .bindTooltip(`<b>${r.cat}</b> · ${r.sev}<br>${r.loc}${r.note ? '<br><span style="opacity:.8">' + r.note + '</span>' : ''}`, { direction: 'top', sticky: true })
         .addTo(markerGroup);
     });
     // rail termini — coloured by punctuality, tooltip shows live departure status
     (c.rail_stations || []).forEach(s => {
-      const col = s.cancelled > 0 ? '#f5564a' : (s.delayed >= Math.max(3, s.total / 3) ? '#f59e42' : (s.delayed > 0 ? '#f5c542' : '#b07aff'));
+      const col = s.cancelled > 0 ? '#e11d48' : (s.delayed >= Math.max(3, s.total / 3) ? '#f59e42' : (s.delayed > 0 ? '#eab308' : '#7c3aed'));
       const tt = `<b>${s.name}</b> · rail terminus<br>${s.ontime}/${s.total} on time` +
         (s.delayed ? ` · ${s.delayed} delayed` : '') + (s.cancelled ? ` · ${s.cancelled} cancelled` : '') +
         (s.next ? `<br>next ${s.next}` : '') + (s.msg ? `<br><span style="opacity:.8">${s.msg}</span>` : '');
-      L.circleMarker([s.lat, s.lon], { radius: 5, color: '#fff', weight: 1.2, fillColor: col, fillOpacity: 0.95 })
+      L.circleMarker([s.lat, s.lon], { pane: 'markers', radius: 7, color: '#fff', weight: 2.5, fillColor: col, fillOpacity: 1 })
         .bindTooltip(tt, { direction: 'top', sticky: true }).addTo(markerGroup);
     });
-    // demand hotspots (airports, football) — smaller than before
+    // demand hotspots (airports, football)
     (c.hotspots || []).forEach(h => L.circleMarker([h.lat, h.lon],
-      { radius: 4 + h.weight * 6, color: '#fff', weight: 1.2, fillColor: TYPECOL[h.type], fillOpacity: 0.9 })
+      { pane: 'markers', radius: 6 + h.weight * 6, color: '#fff', weight: 2.5, fillColor: TYPECOL[h.type], fillOpacity: 1 })
       .bindTooltip(`<b>${h.name}</b><br>${h.detail}`, { direction: 'top', sticky: true })
       .addTo(markerGroup));
     document.getElementById('mapSrc').textContent =
