@@ -3,11 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Seventeen weeks of audited Uber earnings, collected automatically from the driver portal by browser automation and reconciled trip by trip.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Earnings &amp; portal automation — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=7">
+<link rel="stylesheet" href="assets/style.css?v=8">
 </head>
 <body>
-<div class="wrap">
+<main class="wrap" id="rsmain">
   <header class="page">
     <h1>Earnings &amp; portal automation</h1>
     <p class="sub">The bookkeeping layer: a Node.js tool that keeps a complete, auditable local record of
@@ -27,20 +29,20 @@
   <div class="cards" id="hero"></div>
 
   <div class="row2">
-    <div class="panel"><h3>Weekly gross earnings (£)</h3><div class="note">17 Uber weeks, portal-synced</div><div id="earn"></div></div>
-    <div class="panel"><h3>Weekly activities</h3><div class="note">Trips plus incentive/adjustment events</div><div id="cnt"></div></div>
+    <div class="panel"><h2>Weekly gross earnings (£)</h2><div class="note">17 Uber weeks, portal-synced</div><div id="earn"></div></div>
+    <div class="panel"><h2>Weekly activities</h2><div class="note">Trips plus incentive/adjustment events</div><div id="cnt"></div></div>
   </div>
 
   <div class="panel">
-    <h3>Weekly table</h3>
+    <h2>Weekly table</h2>
     <div class="note">From uber/report/trips/week_*.json</div>
     <div id="tbl"></div>
   </div>
 
   <footer class="site">Tool: browser automation (Node.js) with automated sync, tabulation, CSV export and
   statement audit; 23 development checkpoints, tested with Jest.</footer>
-</div>
-<script src="assets/site.js?v=7"></script>
+</main>
+<script src="assets/site.js?v=8"></script>
 <script>
 getJSON('data/trips.json').then(t => {
   const w = t.weekly;
@@ -56,8 +58,8 @@ getJSON('data/trips.json').then(t => {
     '<table><tr><th>Week</th><th class="num">Activities</th><th class="num">Gross £</th></tr>' +
     w.map(x => `<tr><td>${x.label}</td><td class="num">${x.trips}</td><td class="num">£${fmt(x.earnings, 2)}</td></tr>`).join('') +
     '</table>';
-});
+}).catch(dataFail('the earnings data'));
 </script>
-<script src="assets/nav.js?v=7"></script>
+<script src="assets/nav.js?v=8"></script>
 </body>
 </html>

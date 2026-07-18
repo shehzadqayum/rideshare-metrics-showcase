@@ -6,14 +6,15 @@
     ['index.html', 'Overview'],
     ['framework.html', 'Framework'],
     ['routes.html', 'Routes'],
+    ['week.html', 'Week deep dive'],
     ['metrics.html', 'Trip metrics'],
     ['trips.html', 'Earnings'],
     ['demand.html', 'Demand'],
     ['charging.html', 'EV costs'],
   ];
+  // Genuine pipeline output only — week.html is handwritten and lives in PAGES.
   var REPORTS = [
     ['dashboards/cnhr_dashboard.html', 'CNHR–MNHR dashboard', '17 weeks · 762 trips'],
-    ['week.html', 'Week deep dive', 'any week, routes by metric'],
     ['dashboards/surge_report.html', 'Surge intelligence report', 'hourly forecast'],
   ];
 
@@ -76,8 +77,16 @@
   function link(h, t, cls) {
     return '<a href="' + up + h + '"' + (cls ? ' class="' + cls + '"' : '') + '>' + t + '</a>';
   }
+  // The toolbar is a wall of links before the content on every page, so give
+  // keyboard and screen-reader users a way past it.
+  var skip = document.createElement('a');
+  skip.className = 'rsskip';
+  skip.href = '#rsmain';
+  skip.textContent = 'Skip to main content';
+
   var nav = document.createElement('nav');
   nav.className = 'rsnav';
+  nav.setAttribute('aria-label', 'Site sections');
   Object.keys(P).forEach(function (k) { nav.style.setProperty('--n-' + k, P[k]); });
   nav.innerHTML = '<div class="in">'
     + link('index.html', 'Ride-share metrics', 'rsbrand')
@@ -92,6 +101,21 @@
       }).join('')
     + '</div></div></div>';
   document.body.insertBefore(nav, document.body.firstChild);
+  document.body.insertBefore(skip, nav);
+
+  // Give the skip link a target: the page's own main region, whatever it is.
+  var main = document.querySelector('main, .wrap');
+  if (main && !main.id) main.id = 'rsmain';
+  if (main && !main.hasAttribute('tabindex')) main.setAttribute('tabindex', '-1');
+
+  // Pages pin their own sticky bars below this one, so publish the real height
+  // rather than let them guess: the toolbar wraps to two rows under 820px.
+  function publishHeight() {
+    document.documentElement.style.setProperty('--rsnav-h', nav.offsetHeight + 'px');
+  }
+  publishHeight();
+  window.addEventListener('resize', publishHeight);
+  if (window.ResizeObserver) new ResizeObserver(publishHeight).observe(nav);
 
   var btn = nav.querySelector('#rsddbtn'), menu = nav.querySelector('#rsddmenu');
   function close() { menu.style.display = 'none'; menu.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); }
@@ -104,5 +128,22 @@
   });
   menu.addEventListener('click', function (e) { e.stopPropagation(); });
   document.addEventListener('click', close);
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+
+  // Keyboard: Escape closes and returns focus to the button; Down opens and
+  // steps into the menu; Up/Down cycle within it.
+  var items = function () { return [].slice.call(menu.querySelectorAll('a')); };
+  btn.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowDown' && e.key !== 'Enter' && e.key !== ' ') return;
+    if (menu.style.display !== 'block') { e.preventDefault(); btn.click(); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); var f = items()[0]; if (f) f.focus(); }
+  });
+  menu.addEventListener('keydown', function (e) {
+    var list = items(), i = list.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (list[i + 1] || list[0]).focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (list[i - 1] || list[list.length - 1]).focus(); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || menu.style.display !== 'block') return;
+    close(); btn.focus();
+  });
 })();

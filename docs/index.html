@@ -3,8 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A working showcase of ride-share data tools: 890+ real London private-hire trips captured, GPS-mapped, cost-normalised and scored with the CNHR-MNHR framework.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Ride-share metrics — a working showcase</title>
-<link rel="stylesheet" href="assets/style.css?v=7">
+<link rel="stylesheet" href="assets/style.css?v=8">
 <style>
   .tile.artifact { border-left:3px solid var(--s1); }
   .tile .go { margin-top:9px; font-size:.78rem; font-weight:600; color:var(--s1); }
@@ -12,10 +14,10 @@
 </style>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap" id="rsmain">
   <header class="page">
     <h1>Driving London, measured</h1>
-    <p class="sub">Between December 2025 and April 2026 I drove <b>890+ private-hire trips</b> across London
+    <p class="sub">Between December 2025 and March 2026 I drove <b>890+ private-hire trips</b> across London
     in an electric vehicle. Alongside the driving I built a suite of software tools — using AI-assisted
     development with Claude Code — to automate the paperwork and to answer two questions with data:
     <b>which trip offers are worth accepting</b>, and <b>when is it most productive to work</b>.
@@ -55,8 +57,12 @@
   <div class="tile-grid">
     <a class="tile" href="routes.html">
       <div class="t">Routes covered</div><div class="k">uber_screen · Python · Leaflet</div>
-      <div class="b">Every GPS-tracked journey on one map — filter by day, colour by earnings, speed or
-      service, hover any segment for its numbers.</div></a>
+      <div class="b">Every GPS-tracked journey on one map — filter by day, colour by segment type,
+      £ per mile or service, hover any segment for its distance, speed and fare.</div></a>
+    <a class="tile" href="week.html">
+      <div class="t">Week deep dive</div><div class="k">uber_screen · 7 GPS weeks · 356 trips</div>
+      <div class="b">Pick a week and see every tracked trip on one map, coloured by the metric you choose —
+      four-state, MNHR, £/hour or £/mile. Click a route to isolate it; hover for its full numbers.</div></a>
     <a class="tile" href="metrics.html">
       <div class="t">Trip-selection metrics</div><div class="k">uber_screen · CNHR/MNHR pipeline</div>
       <div class="b">Screenshots of ride offers are read by AI vision, reconciled against the portal, and
@@ -89,11 +95,6 @@
       <div class="b">The hour-by-hour surge forecast: intensity heatmap across five signals, five ranked
       priority windows with positioning advice and estimated multipliers, plus current conditions.</div>
       <div class="go">Open the report →</div></a>
-    <a class="tile artifact" href="week.html">
-      <div class="t">Week deep dive</div><div class="k">any of 7 weeks · 356 GPS-tracked trips</div>
-      <div class="b">Pick a week and see every tracked trip on one map, coloured by the metric you choose
-      (default, four-state, MNHR, £/hour, £/mile). Click a route to isolate it; hover for its full numbers.</div>
-      <div class="go">Open the week view →</div></a>
   </div>
 
   <h2>How it fits together</h2>
@@ -111,8 +112,8 @@
 
   <footer class="site">Built with AI-assisted development (Claude Code). All figures are real, drawn from
   the projects' own report files. Passenger names are removed and addresses reduced to area level.</footer>
-</div>
-<script src="assets/site.js?v=7"></script>
+</main>
+<script src="assets/site.js?v=8"></script>
 <script>
 Promise.all([getJSON('data/trips.json'), getJSON('data/charging.json'), getJSON('data/routes.json'), getJSON('data/metrics.json')])
 .then(([t, c, r, m]) => {
@@ -124,8 +125,8 @@ Promise.all([getJSON('data/trips.json'), getJSON('data/charging.json'), getJSON(
     card(fmt(segs), 'GPS route segments', fmt(miles) + ' miles mapped') +
     card(fmt(c.sessions), 'charging sessions', fmt(c.kwh) + ' kWh') +
     card(m.weekly.filter(w => w.cnhr >= 15).length + '/' + m.weekly.length, 'weeks at target rate', '£15/h after costs');
-});
+}).catch(dataFail('the summary data'));
 </script>
-<script src="assets/nav.js?v=7"></script>
+<script src="assets/nav.js?v=8"></script>
 </body>
 </html>

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "showcase",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8877", "--directory", "docs"],
+      "port": 8877
+    }
+  ]
+}

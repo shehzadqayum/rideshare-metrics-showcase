@@ -3,11 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Pick any of seven GPS-tracked weeks and see every trip on one map, coloured by four-state, MNHR, earnings per hour or per mile. Click a route to isolate it.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Week deep dive — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=7">
+<link rel="stylesheet" href="assets/style.css?v=8">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-  .weekbar { position:sticky; top:44px; z-index:4; background:var(--page); padding:10px 0 8px;
+  .weekbar { position:sticky; top:var(--rsnav-h, 52px); z-index:5; background:var(--page); padding:10px 0 8px;
     border-bottom:1px solid var(--border); margin-bottom:14px; }
   .weekbar .lab { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px; }
   .weeks { display:flex; gap:8px; flex-wrap:wrap; }
@@ -17,7 +19,12 @@
   .wk.on { border-color:var(--s1); background:color-mix(in srgb, var(--s1) 12%, var(--surface)); }
   .wk .d1 { font-weight:650; font-size:.86rem; }
   .wk .d2 { font-size:.71rem; color:var(--muted); }
-  #wmap { height:520px; border-radius:10px; border:1px solid var(--border); }
+  /* z-index:0 traps Leaflet's own panes (400) and controls (1000) inside the
+     map, so they cannot paint over the sticky bar as the page scrolls. */
+  #wmap { height:520px; border-radius:10px; border:1px solid var(--border); position:relative; z-index:0; }
+  /* On a phone the toolbar wraps to two rows; a second sticky bar under it
+     would eat a quarter of the viewport, so let this one scroll away. */
+  @media (max-width:820px) { #wmap { height:360px; } .weekbar { position:static; } }
   .leaflet-tooltip.rt { width:250px; white-space:normal; line-height:1.4; font-size:.76rem; }
   .leaflet-tooltip.rt .r { display:flex; justify-content:space-between; gap:8px; }
   .leaflet-tooltip.rt .r span:last-child { font-variant-numeric:tabular-nums; }
@@ -26,10 +33,15 @@
   .mlegend .hint { margin-left:auto; color:var(--s1); }
   .swatch { display:inline-flex; align-items:center; gap:5px; }
   .swatch i { width:11px; height:11px; border-radius:3px; display:inline-block; }
+  #wkTable tr.hasroute { cursor:pointer; }
+  #wkTable tr.hasroute:hover td { background:color-mix(in srgb, var(--s1) 7%, transparent); }
+  /* the isolated row needs to be unmistakable — it is the only confirmation the click worked */
+  #wkTable tr.sel td { background:color-mix(in srgb, var(--s1) 18%, transparent); font-weight:600; }
+  #wkTable tr.noroute td { color:var(--muted); }
 </style>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap" id="rsmain">
   <header class="page">
     <h1>Week deep dive</h1>
     <p class="sub">Every GPS-tracked trip of a single week on one map, coloured by the metric you choose.
@@ -44,7 +56,7 @@
   <div class="cards" id="wkCards"></div>
 
   <div class="panel">
-    <h3>Routes <span id="wkWhen" style="font-weight:400;color:var(--muted);font-size:.8rem"></span></h3>
+    <h2>Routes <span id="wkWhen" style="font-weight:400;color:var(--muted);font-size:.8rem"></span></h2>
     <div class="note">Colour by:</div>
     <div class="controls" id="modeBtns">
       <button data-mode="default" class="on">Default</button>
@@ -67,15 +79,16 @@
   </div>
 
   <div class="panel">
-    <h3>Trips this week</h3>
-    <div class="note">Click a row to isolate that trip on the map</div>
+    <h2>Trips this week</h2>
+    <div class="note">Click a row — or focus it and press Enter — to isolate that trip on the map.
+      Greyed rows have no GPS route recorded, so there is nothing to show.</div>
     <div id="wkTable"></div>
   </div>
 
   <footer class="site">Data: docs/data/weeks.json — extracted from the pipeline's metrics engine with GPS
   tracks re-derived from the raw GPX logs. Map tiles © OpenStreetMap / CARTO.</footer>
-</div>
-<script src="assets/site.js?v=7"></script>
+</main>
+<script src="assets/site.js?v=8"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const STATE_C = { SUSTAINED:'#15803d', ACCEL_REC:'#0e7490', DECEL:'#b45309', STALLED:'#b91c1c' };
@@ -94,6 +107,7 @@ function metricVal(t) {
        : mode === 'per_mi' ? (+t.per_mi || 0) : 0;
 }
 const isMetric = () => ['mnhr', 'per_hr', 'per_mi'].includes(mode);
+const hasRoute = t => (t.trip && t.trip.length > 1) || (t.enroute && t.enroute.length > 1);
 
 function scale(trips) {
   const v = trips.map(metricVal).filter(n => isFinite(n) && n !== 0).sort((a, b) => a - b);
@@ -103,9 +117,15 @@ function scale(trips) {
   if (!(hi > lo)) hi = lo + 1;
   return [lo, hi];
 }
+const NOVAL_C = '#9ca3af';   // "not measured" — must not read as the low end of the ramp
+function hasMetric(t) {
+  return mode === 'mnhr' ? t.mnhr != null : mode === 'per_hr' ? t.per_hr != null
+       : mode === 'per_mi' ? t.per_mi != null : true;
+}
 function colorFor(t) {
   if (mode === 'default') return DEFAULT_C;
   if (mode === 'state') return STATE_C[t.state] || '#64748b';
+  if (!hasMetric(t)) return NOVAL_C;
   return ramp((metricVal(t) - LO) / (HI - LO));
 }
 const row = (a, b) => `<div class="r"><span>${a}</span><span>${b}</span></div>`;
@@ -137,13 +157,16 @@ function legend() {
     const stops = [0, .25, .5, .75, 1].map(ramp).join(',');
     el.innerHTML = `<span>${MLABEL[mode]}</span><span>${Math.round(LO * 100) / 100}</span>`
       + `<span class="bar" style="background:linear-gradient(90deg,${stops})"></span>`
-      + `<span>${Math.round(HI * 100) / 100}</span>` + hint;
+      + `<span>${Math.round(HI * 100) / 100}</span>`
+      + `<span class="swatch"><i style="background:${NOVAL_C}"></i>not measured</span>` + hint;
   }
 }
 
-function draw() {
+// fit=false keeps the viewer's pan/zoom — recolouring is not a reason to move the map.
+function draw(fit) {
   if (!WK) return;
-  const gps = WK.trips.filter(t => (t.trip && t.trip.length > 1) || (t.enroute && t.enroute.length > 1));
+  if (fit === undefined) fit = true;
+  const gps = WK.trips.filter(hasRoute);
   if (isMetric()) { const s = scale(gps); LO = s[0]; HI = s[1]; }
   const shown = isolated ? gps.filter(t => t.n === isolated) : gps;
   layerGroup.clearLayers();
@@ -164,7 +187,7 @@ function draw() {
     if (t.pu) wire(L.circleMarker(t.pu, { radius: 4.5, color: '#fff', weight: 1.5, fillColor: c, fillOpacity: 1 }));
     if (t.do) wire(L.circleMarker(t.do, { radius: 4.5, color: c, weight: 2, fillColor: '#fff', fillOpacity: 1 }));
   });
-  if (bounds.isValid()) wmap.fitBounds(bounds, { padding: [30, 30], maxZoom: isolated ? 15 : 13 });
+  if (fit && bounds.isValid()) wmap.fitBounds(bounds, { padding: [30, 30], maxZoom: isolated ? 15 : 13 });
 
   const st = document.getElementById('wkStats');
   if (isolated) {
@@ -174,15 +197,21 @@ function draw() {
   } else {
     st.textContent = `${gps.length} of ${WK.trips.length} trips have a GPS route`;
   }
-  document.querySelectorAll('#wkTable tr[data-n]').forEach(r =>
-    r.style.background = (+r.dataset.n === isolated) ? 'var(--page)' : '');
+  document.querySelectorAll('#wkTable tr[data-n]').forEach(r => {
+    const on = +r.dataset.n === isolated;
+    r.classList.toggle('sel', on);
+    r.setAttribute('aria-pressed', String(on));
+  });
   legend();
 }
 
 function selectWeek(i) {
   WK = DATA.weeks[i];
   isolated = null;
-  document.querySelectorAll('.wk').forEach((b, j) => b.classList.toggle('on', j === i));
+  document.querySelectorAll('.wk').forEach((b, j) => {
+    b.classList.toggle('on', j === i);
+    b.setAttribute('aria-pressed', String(j === i));   // selection is otherwise colour-only
+  });
   document.getElementById('wkWhen').textContent = '— ' + WK.label;
   document.getElementById('wkCards').innerHTML =
     card(WK.n, 'trips', `${WK.gps} with GPS route`) +
@@ -194,20 +223,33 @@ function selectWeek(i) {
     '<table><tr><th>#</th><th>Day</th><th>Time</th><th>Service</th><th>From → To</th>'
     + '<th class="num">Earn</th><th class="num">Min</th><th class="num">Mi</th>'
     + '<th class="num">£/hr</th><th class="num">£/mi</th><th class="num">CNHR</th><th>State</th></tr>'
-    + WK.trips.map(t => `<tr data-n="${t.n}" style="cursor:pointer">`
-      + `<td>${t.n}</td><td>${t.day || ''}</td><td>${t.time || ''}</td><td>${t.svc || ''}</td>`
-      + `<td style="color:var(--ink2)">${t.from || '?'} → ${t.to || '?'}</td>`
-      + `<td class="num">${money(t.earn)}</td><td class="num">${t.mins ? Math.round(t.mins) : '—'}</td>`
-      + `<td class="num">${t.mi ? t.mi.toFixed(1) : '—'}</td>`
-      + `<td class="num">${t.per_hr ? money(t.per_hr) : '—'}</td><td class="num">${t.per_mi ? money(t.per_mi) : '—'}</td>`
-      + `<td class="num">${money(t.rn)}</td>`
-      + `<td style="color:${STATE_C[t.state] || 'var(--ink2)'}">${STATE_L[t.state] || ''}</td></tr>`).join('')
+    + WK.trips.map(t => {
+      const routed = hasRoute(t);
+      // Only routed rows do anything, so only they advertise themselves as controls.
+      return `<tr data-n="${t.n}" class="${routed ? 'hasroute' : 'noroute'}"`
+        + (routed ? ' tabindex="0" role="button" aria-pressed="false"'
+                    + ` aria-label="Isolate trip ${t.n} on the map"` : ' title="No GPS route recorded"')
+        + '>'
+        + `<td>${t.n}</td><td>${t.day || ''}</td><td>${t.time || ''}</td><td>${t.svc || ''}</td>`
+        + `<td style="color:var(--ink2)">${t.from || '?'} → ${t.to || '?'}</td>`
+        + `<td class="num">${money(t.earn)}</td><td class="num">${t.mins != null ? Math.round(t.mins) : '—'}</td>`
+        + `<td class="num">${t.mi != null ? t.mi.toFixed(1) : '—'}</td>`
+        + `<td class="num">${t.per_hr != null ? money(t.per_hr) : '—'}</td>`
+        + `<td class="num">${t.per_mi != null ? money(t.per_mi) : '—'}</td>`
+        + `<td class="num">${money(t.rn)}</td>`
+        + `<td>${STATE_L[t.state] || ''}</td></tr>`;
+    }).join('')
     + '</table>';
-  document.querySelectorAll('#wkTable tr[data-n]').forEach(r => r.addEventListener('click', () => {
-    const n = +r.dataset.n, t = WK.trips.find(x => x.n === n);
-    if (!t || !((t.trip && t.trip.length > 1) || (t.enroute && t.enroute.length > 1))) return;
-    isolated = (isolated === n) ? null : n; lastClick = Date.now(); draw();
-  }));
+  document.querySelectorAll('#wkTable tr.hasroute').forEach(r => {
+    const go = () => {
+      const n = +r.dataset.n;
+      isolated = (isolated === n) ? null : n; lastClick = Date.now(); draw();
+    };
+    r.addEventListener('click', go);
+    r.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    });
+  });
   draw();
 }
 
@@ -226,10 +268,17 @@ getJSON('data/weeks.json').then(d => {
   layerGroup = L.layerGroup().addTo(wmap);
   wmap.on('click', () => { if (isolated != null && Date.now() - lastClick > 120) { isolated = null; draw(); } });
 
-  document.querySelectorAll('#modeBtns button').forEach(b => b.addEventListener('click', () => {
-    document.querySelectorAll('#modeBtns button').forEach(x => x.classList.remove('on'));
-    b.classList.add('on'); mode = b.dataset.mode; draw();
-  }));
+  document.querySelectorAll('#modeBtns button').forEach(b => {
+    b.setAttribute('aria-pressed', String(b.classList.contains('on')));
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#modeBtns button').forEach(x => {
+        x.classList.remove('on'); x.setAttribute('aria-pressed', 'false');
+      });
+      b.classList.add('on'); b.setAttribute('aria-pressed', 'true');
+      mode = b.dataset.mode;
+      draw(false);              // recolour in place; don't throw away the viewer's pan/zoom
+    });
+  });
 
   // ?week=YYYY-MM-DD deep-links a specific week; otherwise show the richest one
   const want = new URLSearchParams(location.search).get('week');
@@ -237,8 +286,15 @@ getJSON('data/weeks.json').then(d => {
   d.weeks.forEach((w, i) => { if (w.gps > d.weeks[best].gps) best = i; });
   const wanted = want ? d.weeks.findIndex(w => w.key === want) : -1;
   selectWeek(wanted >= 0 ? wanted : best);
-});
+  if (want && wanted < 0) {
+    // Silently showing a different week than the link asked for would mislead.
+    document.querySelector('.weekbar').insertAdjacentHTML('afterend',
+      '<div class="explain" role="status" style="border-left-color:var(--warn)">'
+      + 'No GPS data for the week starting <b>' + want.replace(/[<>&]/g, '') + '</b>, '
+      + 'so the week below is shown instead. Only 7 of the 17 weeks have GPS routes.</div>');
+  }
+}).catch(dataFail('the week data'));
 </script>
-<script src="assets/nav.js?v=7"></script>
+<script src="assets/nav.js?v=8"></script>
 </body>
 </html>

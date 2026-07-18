@@ -3,12 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=7">
+<link rel="stylesheet" href="assets/style.css?v=8">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
-<div class="wrap">
+<main class="wrap" id="rsmain">
   <header class="page">
     <h1>Routes covered, with metrics</h1>
     <p class="sub">Every line on this map is a real GPS-tracked journey segment, reconstructed by the
@@ -40,7 +42,7 @@
   <div id="map"></div>
 
   <div class="panel">
-    <h3>Reading the map</h3>
+    <h2>Reading the map</h2>
     <div class="note">A few things the routes make visible</div>
     <ul style="font-size:.85rem; color:var(--ink2); margin-left:18px; line-height:1.7">
       <li><b>Segment type</b> — grey en-route lines show the unpaid approach to every pickup; the paid
@@ -53,8 +55,8 @@
 
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
-</div>
-<script src="assets/site.js?v=7"></script>
+</main>
+<script src="assets/site.js?v=8"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -141,19 +143,20 @@ function render() {
 
 getJSON('data/routes.json').then(d => {
   DATA = d;
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const cov = d.coverage;
   if (cov) {
     const gpsWeeks = cov.weeks.filter(w => w.gps > 0);
     const span = Object.keys(d.days).sort();
-    const dfmt = s => `${s.slice(6)} ${['Jan','Feb','Mar','Apr'][+s.slice(4,6)-1]}`;
+    const dfmt = s => `${+s.slice(6)} ${MON[+s.slice(4,6)-1]}`;
     document.getElementById('coverage').innerHTML =
       `<b>Coverage &amp; honesty note.</b> GPS route capture ran <b>${dfmt(span[0])} – ${dfmt(span[span.length-1])} 2026</b>. ` +
-      `Of ${cov.total_trips} total trips, <b>${cov.gps_trips} have a GPS route</b> shown here, across ${gpsWeeks.length} weeks. ` +
+      `Of the ${cov.total_trips} trips recorded in the Uber portal across these 17 weeks, ` +
+      `<b>${cov.gps_trips} have a GPS route</b> shown here, across ${gpsWeeks.length} weeks. ` +
       `The remaining trips — mostly December, early January and mid-to-late March — were reconstructed from the Uber portal only, ` +
       `with the GPS tracker not running, so no route exists to draw. Nothing is invented; a trip with no recorded track simply isn't plotted.`;
   }
   const sel = document.getElementById('daySel');
-  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const dayKeys = Object.keys(d.days).sort();
   sel.querySelector('option[value="ALL"]').textContent = `All days (${cov ? cov.gps_trips : ''} trips)`;
   dayKeys.forEach(k => {
@@ -180,8 +183,8 @@ getJSON('data/routes.json').then(d => {
       render();
     }));
   render();
-});
+}).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=7"></script>
+<script src="assets/nav.js?v=8"></script>
 </body>
 </html>

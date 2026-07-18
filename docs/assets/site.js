@@ -80,4 +80,23 @@ function stateChart(el, rows, legendEl) {
       .map(([k, v]) => `<span><span class="sw" style="background:var(${v})"></span>${k}</span>`).join('');
 }
 
-const getJSON = p => fetch(p).then(r => r.json());
+const getJSON = p => fetch(p).then(r => {
+  if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+  return r.json();
+});
+
+/* Every page builds its content inside a getJSON .then, so an unhandled
+   rejection leaves empty cards and a blank map box with nothing to explain it.
+   Pages pass the selector of their main container. */
+function dataFail(file) {
+  return err => {
+    const host = document.querySelector('header.page') || document.querySelector('main, .wrap');
+    if (host) host.insertAdjacentHTML('afterend',
+      '<div class="explain" role="alert" style="border-left-color:var(--critical)">'
+      + '<b>Could not load ' + (file || 'the data for this page') + '.</b> '
+      + 'The request failed (' + err.message + '), so the figures, tables and maps below are empty. '
+      + 'If you opened this file directly from disk, your browser blocks the data files — '
+      + 'serve the <code>docs/</code> folder over HTTP instead. Otherwise reload the page.</div>');
+    console.error('[showcase] data load failed:', file, err);
+  };
+}

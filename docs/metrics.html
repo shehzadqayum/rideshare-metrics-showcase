@@ -3,11 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="How screenshots of ride offers become an honest hourly rate: the CNHR-MNHR pipeline, weekly results for 17 weeks, and the four-state diagnostic explained.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Trip-selection metrics — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=7">
+<link rel="stylesheet" href="assets/style.css?v=8">
 </head>
 <body>
-<div class="wrap">
+<main class="wrap" id="rsmain">
   <header class="page">
     <h1>Trip-selection metrics (CNHR / MNHR)</h1>
     <p class="sub">The centre of the suite: a pipeline that turns screenshots of ride offers into an honest
@@ -39,7 +41,7 @@
   <div class="cards" id="hero"></div>
 
   <div class="panel">
-    <h3>Cost-normalised hourly rate by week (£/h)</h3>
+    <h2>Cost-normalised hourly rate by week (£/h)</h2>
     <div class="note">Dot colour = the week's diagnostic state. The dashed line is the £15/h target.</div>
     <div class="legend" id="cnhrLegend"></div>
     <div id="cnhrChart"></div>
@@ -57,8 +59,10 @@
   </div>
 
   <div class="panel">
-    <h3>Weekly detail</h3>
-    <div class="note">Straight from the pipeline's reports/metrics/week_*.json files</div>
+    <h2>Weekly detail</h2>
+    <div class="note">Straight from the pipeline's reports/metrics/week_*.json files. Earnings here cover
+      the 762 <i>scored</i> trips only, so they run lower than the full portal gross on the
+      <a href="trips.html">earnings page</a>, which counts every activity in the week.</div>
     <div id="tbl"></div>
   </div>
 
@@ -67,8 +71,8 @@
   with its GPS route map →</a></p>
 
   <footer class="site">Constants: weekly cost £430, target £15/h, EMA α = 0.15, baseline 20.05 h/week.</footer>
-</div>
-<script src="assets/site.js?v=7"></script>
+</main>
+<script src="assets/site.js?v=8"></script>
 <script>
 getJSON('data/metrics.json').then(m => {
   const w = m.weekly;
@@ -77,15 +81,15 @@ getJSON('data/metrics.json').then(m => {
     card(w.length, 'weeks measured', 'Dec 2025 – Mar 2026') +
     card(w.filter(x => x.cnhr >= 15).length + '/' + w.length, 'weeks at target', '£15/h after costs') +
     card('£' + best.cnhr, 'best week £/h', best.label) +
-    card(fmt(w.reduce((a, b) => a + b.trips, 0)), 'trips scored', 'matched to portal earnings') +
+    card(fmt(w.reduce((a, b) => a + b.trips, 0)), 'trips scored', 'reconciled against the portal') +
     card(fmt(w.reduce((a, b) => a + b.hours, 0)) + 'h', 'hours measured', 'paid time');
   stateChart(document.getElementById('cnhrChart'), w, document.getElementById('cnhrLegend'));
   document.getElementById('tbl').innerHTML =
-    '<table><tr><th>Week</th><th class="num">Trips</th><th class="num">Earnings</th><th class="num">Hours</th><th class="num">CNHR £/h</th><th>State</th></tr>' +
+    '<table><tr><th>Week</th><th class="num">Trips</th><th class="num">Earnings (scored)</th><th class="num">Hours</th><th class="num">CNHR £/h</th><th>State</th></tr>' +
     w.map(r => `<tr><td>${r.label}</td><td class="num">${r.trips}</td><td class="num">£${fmt(r.earnings, 2)}</td><td class="num">${r.hours}</td><td class="num">${fmt(r.cnhr, 2)}</td><td>${r.state}</td></tr>`).join('') +
     '</table>';
-});
+}).catch(dataFail('the weekly metrics'));
 </script>
-<script src="assets/nav.js?v=7"></script>
+<script src="assets/nav.js?v=8"></script>
 </body>
 </html>
