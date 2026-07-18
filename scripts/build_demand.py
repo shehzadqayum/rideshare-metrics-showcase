@@ -7,10 +7,75 @@ Two things:
   2. captures - every point-in-time snapshot JSON the daemon saved across days
                 (7-16 Feb), each with the full multi-source metric set.
 """
-import json, glob, os, re, sqlite3, shutil, tempfile
+import json, glob, os, re, sqlite3, shutil, tempfile, html
 
 BASE = '//R7000/bt2/Projects/uber/uber_surge/data'
+REPORTS = BASE + '/reports'
 OUT = os.path.join(os.path.dirname(__file__), '..', 'docs', 'data', 'demand.json')
+
+def clean(t):
+    return html.unescape(re.sub(r'\s+', ' ', t or '')).strip()
+
+# ---------------------------------------------------------------- surge forecast (the pipeline's product)
+def read_forecast():
+    hp = glob.glob(REPORTS + '/*_surge_report.html')
+    mp = glob.glob(REPORTS + '/*_surge_dashboard.md')
+    if not hp:
+        return None
+    s = open(hp[0], encoding='utf-8', errors='ignore').read()
+    body = s[s.find('</style>'):]
+    title = clean(re.search(r'<title>([^<]+)</title>', s).group(1)) if re.search(r'<title>([^<]+)</title>', s) else 'Surge Report'
+
+    # heatmap: 6 category rows x 17 hours (06..22), levels 0..4, DOM order is row-major
+    grid = body[body.find('heatmap-grid'):body.find('heatmap-legend')]
+    cats = re.findall(r'heatmap-label"[^>]*>([^<]+)<', grid)
+    levels = [int(m) for m in re.findall(r'heat-(\d)"', grid)]
+    hours = re.findall(r'heatmap-hour"[^>]*>([^<]+)<', body)
+    per = len(hours) or 17
+    heatmap = [{'cat': clean(cats[i]), 'levels': levels[i * per:(i + 1) * per]} for i in range(len(cats))]
+
+    # priority windows
+    windows = []
+    strip = lambda x: clean(re.sub(r'<[^>]+>', ' ', x))
+    for chunk in body.split('class="surge-card"')[1:]:
+        chunk = chunk[:2000]
+        rank = re.search(r'rank-(\d)', chunk)
+        tit = re.search(r'<h4>(.*?)</h4>', chunk, re.S)
+        trig = re.search(r'trigger"[^>]*>(.*?)</div>', chunk, re.S)
+        tags = [strip(x) for x in re.findall(r'meta-tag">(.*?)</div>', chunk, re.S)]
+        mult = re.search(r'multiplier-value[^"]*"[^>]*>(.*?)</div>', chunk, re.S)
+        mcol = re.search(r'mult-(\w+)', chunk)
+        if not tit:
+            continue
+        windows.append({
+            'rank': rank.group(1) if rank else '',
+            'title': strip(tit.group(1)),
+            'trigger': strip(trig.group(1)) if trig else '',
+            'tags': [t for t in tags if t],
+            'mult': strip(mult.group(1)) if mult else '',
+            'mcolor': mcol.group(1) if mcol else 'orange',
+        })
+
+    # strategy + conditions from the markdown
+    strategy, conditions = [], []
+    if mp:
+        md = open(mp[0], encoding='utf-8', errors='ignore').read()
+        sec = re.search(r'Recommended Shift Plan.*?\n(\|.*?)\n\n', md, re.S)
+        if sec:
+            for row in re.findall(r'^\|(.+)\|$', sec.group(1), re.M)[2:]:
+                c = [clean(x) for x in row.split('|')]
+                if len(c) >= 4 and c[0]:
+                    strategy.append({'time': c[0], 'location': c[1], 'target': c[2], 'mult': c[3]})
+        sec = re.search(r'### Transport Status\s*\n(\|.*?)\n\n', md, re.S)
+        if sec:
+            for row in re.findall(r'^\|(.+)\|$', sec.group(1), re.M)[2:]:
+                c = [clean(x) for x in row.split('|')]
+                if len(c) >= 3 and c[0]:
+                    conditions.append({'system': c[0], 'status': c[1], 'relevance': c[2]})
+
+    return {'title': title, 'hours': [clean(h) for h in hours], 'heatmap': heatmap,
+            'windows': windows, 'strategy': strategy, 'conditions': conditions,
+            'report_file': os.path.basename(hp[0])}
 
 # ---------------------------------------------------------------- DB session
 def read_session():
@@ -88,9 +153,13 @@ def main():
             except Exception as e:
                 print('skip', fn, e)
     caps.sort(key=lambda c: c['ts'])
-    out = {'session': read_session(), 'captures': caps}
+    fc = read_forecast()
+    out = {'forecast': fc, 'session': read_session(), 'captures': caps}
     json.dump(out, open(OUT, 'w'), separators=(',', ':'))
     print(f'demand.json: {os.path.getsize(OUT)/1024:.0f} KB')
+    if fc:
+        print(f"  forecast: {len(fc['heatmap'])} cats x {len(fc['hours'])} hrs, "
+              f"{len(fc['windows'])} windows, {len(fc['strategy'])} strategy rows, {len(fc['conditions'])} conditions")
     print(f"  session: {out['session']['date']} {out['session']['window']} "
           f"{out['session']['cycles']} cycles, {len(out['session']['series'])} points")
     print(f"  captures: {len(caps)} across days {sorted(set(c['date'] for c in caps))}")
