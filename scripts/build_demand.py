@@ -8,6 +8,7 @@ Two things:
                 (7-16 Feb), each with the full multi-source metric set.
 """
 import json, glob, os, re, sqlite3, shutil, tempfile, html
+from datetime import datetime
 
 BASE = '//R7000/bt2/Projects/uber/uber_surge/data'
 REPORTS = BASE + '/reports'
@@ -103,6 +104,17 @@ def read_session():
 def data(x):
     return x.get('data') if isinstance(x, dict) else None
 
+def near_term(cap_date, fx_date, days=3):
+    """True if the fixture date is within `days` on/after the capture date."""
+    if not cap_date or not fx_date:
+        return False
+    try:
+        c = datetime.strptime(cap_date[:10], '%Y-%m-%d')
+        f = datetime.strptime(fx_date[:10], '%Y-%m-%d')
+    except Exception:
+        return False
+    return 0 <= (f - c).days <= days
+
 def dedupe_fixtures(matches):
     seen, out = set(), []
     for m in sorted(matches, key=lambda x: (x.get('date') or '', x.get('kickoff') or '')):
@@ -126,6 +138,7 @@ def dedupe_events(events):
 
 def read_capture(path):
     d = json.load(open(path, encoding='utf-8'))
+    ts = d.get('timestamp', '')
     src = d.get('sources', {}); tfl = src.get('tfl', {})
     def t(ep): return data(tfl.get(ep, {})) or {}
     ls = t('line_status')
@@ -185,25 +198,54 @@ def read_capture(path):
         if isinstance(pt, list) and len(pt) == 2:
             road.append([round(pt[1], 4), round(pt[0], 4), SEV_W.get(x.get('severity'), 0.28)])
 
-    # demand-hotspot markers for this capture: football venues + (if aviation) airports
-    hotspots = []
+    # demand-hotspot markers for this capture: football venues (near-term only) + (if aviation) airports
+    cap_date = ts[:10]
+    hotspots, fseen = [], set()
     for m in (fb.get('london_matches') or []):
         a = m.get('area')
-        if a in GEO:
-            when = (m.get('date') or '') + (' ' + m.get('kickoff') if m.get('kickoff') else '')
-            hotspots.append({'name': m.get('venue') or m.get('home_team'), 'lat': GEO[a][0], 'lon': GEO[a][1],
-                             'weight': 0.7, 'type': 'fixture',
-                             'detail': f"{m.get('home_team')} v {m.get('away_team')}<br>{when.strip()} — football egress"})
+        if a not in GEO or not near_term(cap_date, m.get('date')):
+            continue
+        key = (m.get('venue'), m.get('date'))
+        if key in fseen:
+            continue
+        fseen.add(key)
+        when = (m.get('date') or '') + (' ' + m.get('kickoff') if m.get('kickoff') else '')
+        hotspots.append({'name': m.get('venue') or m.get('home_team'), 'lat': GEO[a][0], 'lon': GEO[a][1],
+                         'weight': 0.7, 'type': 'fixture',
+                         'detail': f"{m.get('home_team')} v {m.get('away_team')} · {when.strip()}"})
     if aviation:
         for ap in ('LHR', 'LGW', 'LCY', 'STN', 'LTN'):
             hotspots.append({'name': AIRPORT_NAME[ap] + ' Airport', 'lat': GEO[ap][0], 'lon': GEO[ap][1],
                              'weight': 0.85 if ap in ('LHR', 'LGW') else 0.55, 'type': 'airport',
                              'detail': 'International arrivals'})
 
-    ts = d.get('timestamp', '')
+    # national rail termini markers (per-station disruption messages)
+    rail_stations = []
+    nr_st = (data((src.get('national_rail') or {}).get('departure_board', {})) or {}).get('stations') or {}
+    for crs, info in (nr_st.items() if isinstance(nr_st, dict) else []):
+        if crs not in RAIL_GEO:
+            continue
+        msgs = [m.strip() for m in (info.get('nrcc_messages') or []) if m.strip()]
+        rail_stations.append({'name': RAIL_GEO[crs][2], 'lat': RAIL_GEO[crs][0], 'lon': RAIL_GEO[crs][1],
+                              'msgs': len(msgs), 'detail': (msgs[0][:160] if msgs else 'No advisories')})
+
+    # road-disruption markers (Serious + Moderate only, to stay legible) with hover detail
+    road_markers = []
+    for x in (rd.get('disruptions') or []):
+        if x.get('severity') not in ('Serious', 'Severe', 'Moderate'):
+            continue
+        pt = x.get('point')
+        if isinstance(pt, str):
+            mm = re.findall(r'-?\d+\.\d+', pt)
+            pt = [float(mm[0]), float(mm[1])] if len(mm) >= 2 else None
+        if isinstance(pt, list) and len(pt) == 2:
+            road_markers.append({'lat': round(pt[1], 4), 'lon': round(pt[0], 4),
+                                 'sev': x.get('severity'), 'cat': x.get('category') or 'Disruption',
+                                 'loc': (x.get('location') or '')[:80], 'note': (x.get('comments') or '')[:160]})
+
     return {
         'ts': ts, 'date': ts[:10], 'time': ts[11:16], 'sources': list(src.keys()),
-        'road_points': road, 'hotspots': hotspots,
+        'road_points': road, 'hotspots': hotspots, 'rail_stations': rail_stations, 'road_markers': road_markers,
         # headline (kept for the demand overview)
         'health': ls.get('network_health_pct'), 'disrupted': ls.get('disrupted_lines'), 'total': ls.get('total_lines'),
         'road': rd.get('total'), 'station': sd.get('total'), 'closures': sd.get('closure_count'),
@@ -219,7 +261,7 @@ def read_capture(path):
         'air': {'index': aq.get('index'), 'summary': aq.get('summary')} if aq and not aq.get('is_outage') else None,
         'car_parks_outage': bool(cp.get('is_outage')),
         'aviation': aviation, 'rail': rail, 'weather': weather,
-        'football_list': dedupe_fixtures(fb.get('london_matches') or []),
+        'football_list': dedupe_fixtures([m for m in (fb.get('london_matches') or []) if near_term(ts[:10], m.get('date'))]),
         'events_next6': dedupe_events(tm.get('next_6_hours') or []),
         'events_by_type': {k: (len(v) if isinstance(v, list) else v) for k, v in (tm.get('by_type') or {}).items()},
         'road_serious': [{'location': x.get('location'), 'category': x.get('category'),
@@ -241,6 +283,14 @@ GEO = {
 }
 AIRPORT_NAME = {'LHR': 'Heathrow', 'LGW': 'Gatwick', 'STN': 'Stansted', 'LCY': 'London City', 'LTN': 'Luton'}
 SEV_W = {'Serious': 1.0, 'Severe': 1.0, 'Moderate': 0.55, 'Minimal': 0.28}
+# major London rail termini (CRS -> lat, lon) — the 10 stations the daemon polls
+RAIL_GEO = {
+    'LST': (51.5178, -0.0823, 'Liverpool Street'), 'KGX': (51.5308, -0.1238, "King's Cross"),
+    'STP': (51.5299, -0.1263, 'St Pancras'), 'WAT': (51.5033, -0.1132, 'Waterloo'),
+    'VIC': (51.4952, -0.1441, 'Victoria'), 'PAD': (51.5154, -0.1755, 'Paddington'),
+    'EUS': (51.5282, -0.1337, 'Euston'), 'LBG': (51.5049, -0.0865, 'London Bridge'),
+    'SRA': (51.5416, -0.0042, 'Stratford'), 'FST': (51.5203, -0.1053, 'Farringdon'),
+}
 
 def build_geo(fc, caps):
     hotspots = []
