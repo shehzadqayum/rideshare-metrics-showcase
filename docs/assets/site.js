@@ -12,13 +12,21 @@ const PAGES = [
   ['trips.html', 'Earnings'],
   ['demand.html', 'Demand'],
   ['charging.html', 'EV costs'],
+  ['|', 'Generated'],                                            // separator
+  ['dashboards/cnhr_dashboard.html', 'CNHR dashboard'],
+  ['dashboards/surge_report.html', 'Surge report'],
+  ['dashboards/cnhr_week_20260209.html', 'Week deep dive'],
 ];
 (function nav() {
   const here = location.pathname.split('/').pop() || 'index.html';
+  // pages in /dashboards need to climb a level to reach the site pages
+  const up = /\/dashboards\//.test(location.pathname) ? '../' : '';
   const el = document.createElement('nav');
   el.className = 'site';
   el.innerHTML = `<div class="wrap"><span class="brand">Ride-share metrics</span>` +
-    PAGES.map(([h, t]) => `<a href="${h}" class="${h === here ? 'on' : ''}">${t}</a>`).join('') +
+    PAGES.map(([h, t]) => h === '|'
+      ? `<span class="navsep">${t}</span>`
+      : `<a href="${up}${h}" class="${h.split('/').pop() === here ? 'on' : ''}">${t}</a>`).join('') +
     `<span style="flex:1"></span><a href="https://github.com/" id="ghlink" style="display:none">GitHub</a></div>`;
   document.body.prepend(el);
   const tip = document.createElement('div');
