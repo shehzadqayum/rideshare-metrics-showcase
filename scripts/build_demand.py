@@ -106,35 +106,77 @@ def data(x):
 def read_capture(path):
     d = json.load(open(path, encoding='utf-8'))
     src = d.get('sources', {}); tfl = src.get('tfl', {})
-    ls = data(tfl.get('line_status', {})) or {}
+    def t(ep): return data(tfl.get(ep, {})) or {}
+    ls = t('line_status')
     lines = []
     for l in ls.get('lines', []):
         sts = l.get('lineStatuses') or []
         lines.append({'name': l.get('name'), 'mode': l.get('modeName'),
                       'status': sts[0].get('statusSeverityDescription', 'Good Service') if sts else 'Good Service',
                       'reason': ((sts[0].get('reason') or '')[:200]) if sts else ''})
-    rd = data(tfl.get('road_disruptions', {})) or {}
-    sd = data(tfl.get('station_disruptions', {})) or {}
-    ma = data(tfl.get('mode_arrivals', {})) or {}
+    rd, sd, ma = t('road_disruptions'), t('station_disruptions'), t('mode_arrivals')
+    ld, bo, ev, aq, cp = t('line_disruptions'), t('bike_occupancy'), t('charge_connectors'), t('air_quality'), t('car_parks')
+
+    # aviation (airlabs)
+    al = src.get('airlabs') or {}
+    sa = data(al.get('schedules_arrivals', {})) or {}
+    dl = data(al.get('delays', {})) or {}
+    sf = sa.get('surge_forecast') or {}
+    aviation = None
+    if sa or dl:
+        aviation = {
+            'arrivals': (sa.get('summary') or {}).get('total_arrivals'),
+            'international': (sa.get('summary') or {}).get('international'),
+            'domestic': (sa.get('summary') or {}).get('domestic'),
+            'surge_rating': sf.get('overall_rating'),
+            'peaks': [{'hour': p.get('hour'), 'total': p.get('total'), 'rating': p.get('rating')}
+                      for p in (sf.get('upcoming_peaks') or [])[:4]],
+            'delays': (dl.get('summary') or {}).get('total_delays'),
+            'cancellations': (dl.get('summary') or {}).get('total_cancellations'),
+        }
+
+    # national rail
+    nr = src.get('national_rail') or {}
+    db = (data(nr.get('departure_board', {})) or {}).get('summary') or {}
+    inc = (data(nr.get('kb_incidents', {})) or {}).get('summary') or {}
+    rail = None
+    if db or inc:
+        rail = {'services': db.get('total_services'), 'on_time': db.get('on_time'),
+                'delayed': db.get('delayed'), 'cancelled': db.get('cancelled'),
+                'avg_delay': db.get('avg_delay_mins'), 'incidents': inc.get('total_active')}
+
     fb = data((src.get('football') or {}).get('fixtures', {})) or {}
     tm = data((src.get('ticketmaster') or {}).get('events', {})) or {}
     cur = (data((src.get('metoffice') or {}).get('hourly', {})) or {}).get('current') or {}
+    weather = None
+    if cur:
+        weather = {k: cur.get(k) for k in ('temperature', 'feels_like', 'humidity', 'wind_speed',
+                                           'precipitation_prob', 'uv_index', 'visibility')}
+        weather['desc'] = cur.get('weather_code') or cur.get('description')
+
     ts = d.get('timestamp', '')
     return {
-        'ts': ts, 'date': ts[:10], 'time': ts[11:16],
-        'sources': list(src.keys()),
-        'health': ls.get('network_health_pct'),
-        'disrupted': ls.get('disrupted_lines'), 'total': ls.get('total_lines'),
-        'road': rd.get('total'),
-        'station': sd.get('total'), 'closures': sd.get('closure_count'),
+        'ts': ts, 'date': ts[:10], 'time': ts[11:16], 'sources': list(src.keys()),
+        # headline (kept for the demand overview)
+        'health': ls.get('network_health_pct'), 'disrupted': ls.get('disrupted_lines'), 'total': ls.get('total_lines'),
+        'road': rd.get('total'), 'station': sd.get('total'), 'closures': sd.get('closure_count'),
         'arrivals': ma.get('total_arrivals'), 'arrival_stations': ma.get('total_stations'),
-        'football_total': fb.get('total_matches'),
-        'football_london': len(fb.get('london_matches') or []),
-        'events': tm.get('total'),
-        'temp': cur.get('temperature'),
-        'lines': lines,
+        'football_total': fb.get('total_matches'), 'football_london': len(fb.get('london_matches') or []),
+        'events': tm.get('total'), 'temp': cur.get('temperature'), 'lines': lines,
+        # full detail (for the per-day snapshots page)
+        'road_by_severity': {k: (len(v) if isinstance(v, list) else v) for k, v in (rd.get('by_severity') or {}).items()},
+        'line_disruptions': [{'line': v.get('line_name'), 'status': v.get('status'), 'reason': (v.get('reason') or '')[:200]}
+                             for v in (ld.get('by_line') or {}).values()],
+        'bikes': {'bikes': bo.get('total_bikes'), 'docks': bo.get('total_docks'), 'pct': bo.get('availability_pct')} if bo else None,
+        'ev': {'total': ev.get('total'), 'available': ev.get('available'), 'pct': ev.get('availability_pct')} if ev and not ev.get('is_outage') else None,
+        'air': {'index': aq.get('index'), 'summary': aq.get('summary')} if aq and not aq.get('is_outage') else None,
+        'car_parks_outage': bool(cp.get('is_outage')),
+        'aviation': aviation, 'rail': rail, 'weather': weather,
         'football_list': [{'home': m.get('home_team'), 'away': m.get('away_team'), 'comp': m.get('competition')}
-                          for m in (fb.get('london_matches') or [])[:8]],
+                          for m in (fb.get('london_matches') or [])[:10]],
+        'events_next6': [{'name': e.get('name'), 'venue': e.get('venue'), 'cap': e.get('capacity'), 'start': e.get('start')}
+                         for e in (tm.get('next_6_hours') or [])[:8]],
+        'events_by_type': {k: (len(v) if isinstance(v, list) else v) for k, v in (tm.get('by_type') or {}).items()},
         'road_serious': [{'location': x.get('location'), 'category': x.get('category'),
                           'comments': (x.get('comments') or '')[:150]}
                          for x in ((rd.get('by_severity', {}) or {}).get('Serious') or [])[:5]],
