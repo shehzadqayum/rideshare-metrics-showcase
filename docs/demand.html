@@ -64,7 +64,7 @@
         <div class="hs"><span class="dot" style="background:#b07aff"></span>Rail terminus</div>
         <div class="hs"><span class="dot" style="width:8px;height:8px;background:#f5564a"></span>Road disruption</div>
         <h4 style="margin-top:12px">Road congestion</h4>
-        <div class="hs"><span class="dot" style="background:linear-gradient(90deg,#3fa34d,#f5c542,#f5564a)"></span>disruption density</div>
+        <div class="hs"><span style="width:70px;height:11px;border-radius:3px;flex:0 0 auto;background:linear-gradient(90deg,#2c7bb6,#3fa34d,#f5c542,#f59e42,#f5564a)"></span>low → high density</div>
         <label class="hs" style="cursor:pointer;margin-top:8px"><input type="checkbox" id="heatToggle" checked> show congestion heat</label>
         <div class="note" id="mapSrc" style="margin-top:10px"></div>
       </div>
@@ -190,7 +190,8 @@ getJSON('data/demand.json').then(D => {
     document.getElementById('mapWhen').textContent = `— ${dlabel(c.date)} ${c.time}`;
     if (heatLayer) map.removeLayer(heatLayer);
     heatLayer = L.heatLayer((c.road_points || []).map(p => [p[0], p[1], p[2]]),
-      { radius: 24, blur: 20, minOpacity: 0.25, max: 1.0, gradient: { 0.2: '#3fa34d', 0.5: '#f5c542', 0.8: '#f59e42', 1: '#f5564a' } });
+      { radius: 22, blur: 16, minOpacity: 0.08, max: 1.5,
+        gradient: { 0.08: '#2c7bb6', 0.25: '#3fa3d1', 0.45: '#3fa34d', 0.62: '#f5c542', 0.8: '#f59e42', 1.0: '#f5564a' } });
     if (heatOn) heatLayer.addTo(map);
     markerGroup.clearLayers();
     // road-disruption markers (smallest, under everything)

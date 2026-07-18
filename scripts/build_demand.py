@@ -289,7 +289,7 @@ GEO = {
     'LTN': (51.875, -0.368),
 }
 AIRPORT_NAME = {'LHR': 'Heathrow', 'LGW': 'Gatwick', 'STN': 'Stansted', 'LCY': 'London City', 'LTN': 'Luton'}
-SEV_W = {'Serious': 1.0, 'Severe': 1.0, 'Moderate': 0.55, 'Minimal': 0.28}
+SEV_W = {'Serious': 1.0, 'Severe': 1.0, 'Moderate': 0.45, 'Minimal': 0.13}
 # major London rail termini (CRS -> lat, lon) — the 10 stations the daemon polls
 RAIL_GEO = {
     'LST': (51.5178, -0.0823, 'Liverpool Street'), 'KGX': (51.5308, -0.1238, "King's Cross"),
