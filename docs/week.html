@@ -231,9 +231,12 @@ getJSON('data/weeks.json').then(d => {
     b.classList.add('on'); mode = b.dataset.mode; draw();
   }));
 
-  // default to the richest week
-  let best = 0; d.weeks.forEach((w, i) => { if (w.gps > d.weeks[best].gps) best = i; });
-  selectWeek(best);
+  // ?week=YYYY-MM-DD deep-links a specific week; otherwise show the richest one
+  const want = new URLSearchParams(location.search).get('week');
+  let best = 0;
+  d.weeks.forEach((w, i) => { if (w.gps > d.weeks[best].gps) best = i; });
+  const wanted = want ? d.weeks.findIndex(w => w.key === want) : -1;
+  selectWeek(wanted >= 0 ? wanted : best);
 });
 </script>
 <script src="assets/nav.js?v=7"></script>
