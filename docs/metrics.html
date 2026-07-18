@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Trip-selection metrics — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=6">
+<link rel="stylesheet" href="assets/style.css?v=7">
 </head>
 <body>
 <div class="wrap">
@@ -63,12 +63,12 @@
   </div>
 
   <p style="font-size:.85rem"><a href="dashboards/cnhr_dashboard.html">See the original dashboard the
-  pipeline generates →</a> &nbsp;·&nbsp; <a href="dashboards/cnhr_week_20260209.html">single-week view
+  pipeline generates →</a> &nbsp;·&nbsp; <a href="week.html">single-week view
   with its GPS route map →</a></p>
 
   <footer class="site">Constants: weekly cost £430, target £15/h, EMA α = 0.15, baseline 20.05 h/week.</footer>
 </div>
-<script src="assets/site.js?v=6"></script>
+<script src="assets/site.js?v=7"></script>
 <script>
 getJSON('data/metrics.json').then(m => {
   const w = m.weekly;
@@ -86,6 +86,6 @@ getJSON('data/metrics.json').then(m => {
     '</table>';
 });
 </script>
-<script src="assets/nav.js?v=6"></script>
+<script src="assets/nav.js?v=7"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ride-share metrics — a working showcase</title>
-<link rel="stylesheet" href="assets/style.css?v=6">
+<link rel="stylesheet" href="assets/style.css?v=7">
 <style>
   .tile.artifact { border-left:3px solid var(--s1); }
   .tile .go { margin-top:9px; font-size:.78rem; font-weight:600; color:var(--s1); }
@@ -89,10 +89,10 @@
       <div class="b">The hour-by-hour surge forecast: intensity heatmap across five signals, five ranked
       priority windows with positioning advice and estimated multipliers, plus current conditions.</div>
       <div class="go">Open the report →</div></a>
-    <a class="tile artifact" href="dashboards/cnhr_week_20260209.html">
-      <div class="t">Single-week deep dive</div><div class="k">week of 9 Feb 2026</div>
-      <div class="b">One week in full: 57 GPS-tracked trips on an interactive route map, with per-trip
-      metrics and five colour modes (default, MNHR, state, £/hour, £/mile).</div>
+    <a class="tile artifact" href="week.html">
+      <div class="t">Week deep dive</div><div class="k">any of 7 weeks · 356 GPS-tracked trips</div>
+      <div class="b">Pick a week and see every tracked trip on one map, coloured by the metric you choose
+      (default, four-state, MNHR, £/hour, £/mile). Click a route to isolate it; hover for its full numbers.</div>
       <div class="go">Open the week view →</div></a>
   </div>
 
@@ -112,7 +112,7 @@
   <footer class="site">Built with AI-assisted development (Claude Code). All figures are real, drawn from
   the projects' own report files. Passenger names are removed and addresses reduced to area level.</footer>
 </div>
-<script src="assets/site.js?v=6"></script>
+<script src="assets/site.js?v=7"></script>
 <script>
 Promise.all([getJSON('data/trips.json'), getJSON('data/charging.json'), getJSON('data/routes.json'), getJSON('data/metrics.json')])
 .then(([t, c, r, m]) => {
@@ -126,6 +126,6 @@ Promise.all([getJSON('data/trips.json'), getJSON('data/charging.json'), getJSON(
     card(m.weekly.filter(w => w.cnhr >= 15).length + '/' + m.weekly.length, 'weeks at target rate', '£15/h after costs');
 });
 </script>
-<script src="assets/nav.js?v=6"></script>
+<script src="assets/nav.js?v=7"></script>
 </body>
 </html>

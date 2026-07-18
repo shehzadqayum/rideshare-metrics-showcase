@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Surge intelligence report</title>
-<link rel="stylesheet" href="../assets/style.css?v=6">
+<link rel="stylesheet" href="../assets/style.css?v=7">
 <style>
   .back { display:inline-block; margin:14px 0 0; font-size:.85rem; }
   .heat { display:grid; grid-template-columns:120px repeat(17,1fr); gap:3px; min-width:780px; }
@@ -55,7 +55,7 @@
 
   <footer class="site">Reformatted from the pipeline-generated surge report. Data: ../data/demand.json.</footer>
 </div>
-<script src="../assets/site.js?v=6"></script>
+<script src="../assets/site.js?v=7"></script>
 <script>
 const HEAT = ['rgba(137,135,129,.16)', '#3fa34d', '#f5c542', '#f59e42', '#f5564a'];
 const HEATNAME = ['Baseline', 'Low', 'Moderate', 'High', 'Very High'];
@@ -85,6 +85,6 @@ fetch('../data/demand.json').then(r => r.json()).then(D => {
     F.conditions.map(c => `<tr><td><b>${c.system}</b></td><td style="color:var(--ink2)">${c.status}</td></tr>`).join('') + '</table>' : '';
 });
 </script>
-<script src="../assets/nav.js?v=6"></script>
+<script src="../assets/nav.js?v=7"></script>
 </body>
 </html>

@@ -13,7 +13,7 @@
   ];
   var REPORTS = [
     ['dashboards/cnhr_dashboard.html', 'CNHR–MNHR dashboard', '17 weeks · 762 trips'],
-    ['dashboards/cnhr_week_20260209.html', 'Single-week deep dive', 'week of 9 Feb 2026'],
+    ['week.html', 'Week deep dive', 'any week, routes by metric'],
     ['dashboards/surge_report.html', 'Surge intelligence report', 'hourly forecast'],
   ];
 

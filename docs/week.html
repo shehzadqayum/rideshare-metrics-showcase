@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Week deep dive — ride-share metrics</title>
+<link rel="stylesheet" href="assets/style.css?v=7">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  .weekbar { position:sticky; top:44px; z-index:4; background:var(--page); padding:10px 0 8px;
+    border-bottom:1px solid var(--border); margin-bottom:14px; }
+  .weekbar .lab { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px; }
+  .weeks { display:flex; gap:8px; flex-wrap:wrap; }
+  .wk { background:var(--surface); border:1px solid var(--border); border-radius:9px; padding:8px 13px;
+    cursor:pointer; text-align:left; font:inherit; color:var(--ink); line-height:1.25; }
+  .wk:hover { border-color:var(--s1); }
+  .wk.on { border-color:var(--s1); background:color-mix(in srgb, var(--s1) 12%, var(--surface)); }
+  .wk .d1 { font-weight:650; font-size:.86rem; }
+  .wk .d2 { font-size:.71rem; color:var(--muted); }
+  #wmap { height:520px; border-radius:10px; border:1px solid var(--border); }
+  .leaflet-tooltip.rt { width:250px; white-space:normal; line-height:1.4; font-size:.76rem; }
+  .leaflet-tooltip.rt .r { display:flex; justify-content:space-between; gap:8px; }
+  .leaflet-tooltip.rt .r span:last-child { font-variant-numeric:tabular-nums; }
+  .mlegend { display:flex; align-items:center; gap:10px; margin:8px 0 2px; font-size:.74rem; color:var(--muted); flex-wrap:wrap; }
+  .mlegend .bar { height:10px; width:180px; border-radius:3px; }
+  .mlegend .hint { margin-left:auto; color:var(--s1); }
+  .swatch { display:inline-flex; align-items:center; gap:5px; }
+  .swatch i { width:11px; height:11px; border-radius:3px; display:inline-block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <h1>Week deep dive</h1>
+    <p class="sub">Every GPS-tracked trip of a single week on one map, coloured by the metric you choose.
+    Pick a week, then click any route to isolate it — the same interaction as the routes page.</p>
+  </header>
+
+  <div class="weekbar">
+    <div class="lab">Select a week — <span id="wkCount"></span></div>
+    <div class="weeks" id="weeks"></div>
+  </div>
+
+  <div class="cards" id="wkCards"></div>
+
+  <div class="panel">
+    <h3>Routes <span id="wkWhen" style="font-weight:400;color:var(--muted);font-size:.8rem"></span></h3>
+    <div class="note">Colour by:</div>
+    <div class="controls" id="modeBtns">
+      <button data-mode="default" class="on">Default</button>
+      <button data-mode="state">Four-state</button>
+      <button data-mode="mnhr">MNHR</button>
+      <button data-mode="per_hr">£ per hour</button>
+      <button data-mode="per_mi">£ per mile</button>
+      <span id="wkStats" style="color:var(--muted)"></span>
+    </div>
+    <div class="mlegend" id="mlegend"></div>
+    <div id="wmap"></div>
+  </div>
+
+  <div class="explain">
+    Metrics on this page follow the <b>CNHR–MNHR framework</b> —
+    <a href="framework.html">what every term means</a> ·
+    <a href="https://github.com/shehzadqayum/cnhr-mnhr-framework">reference implementation on GitHub</a>.
+    Addresses are reduced to area level for privacy; en-route legs (the unpaid drive to each pickup) are
+    drawn dashed and grey.
+  </div>
+
+  <div class="panel">
+    <h3>Trips this week</h3>
+    <div class="note">Click a row to isolate that trip on the map</div>
+    <div id="wkTable"></div>
+  </div>
+
+  <footer class="site">Data: docs/data/weeks.json — extracted from the pipeline's metrics engine with GPS
+  tracks re-derived from the raw GPX logs. Map tiles © OpenStreetMap / CARTO.</footer>
+</div>
+<script src="assets/site.js?v=7"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const STATE_C = { SUSTAINED:'#15803d', ACCEL_REC:'#0e7490', DECEL:'#b45309', STALLED:'#b91c1c' };
+const STATE_L = { SUSTAINED:'Sustained', ACCEL_REC:'Accel recovery', DECEL:'Decelerating', STALLED:'Stalled' };
+const DEFAULT_C = '#2563eb', ENROUTE_C = '#94a3b8';
+const MLABEL = { mnhr:'MNHR (true) £/hr', per_hr:'£ per hour', per_mi:'£ per mile' };
+// low -> high, blue to red at 42% lightness so every step reads on the light basemap
+const ramp = f => `hsl(${Math.round(225 * (1 - Math.max(0, Math.min(1, f))))},78%,42%)`;
+
+let DATA, wmap, layerGroup, WK = null, mode = 'default', isolated = null, lastClick = 0, LO = 0, HI = 1;
+const money = n => n == null ? '—' : '£' + (+n).toFixed(2);
+
+function metricVal(t) {
+  return mode === 'mnhr' ? (+t.mnhr || 0)
+       : mode === 'per_hr' ? (+t.per_hr || 0)
+       : mode === 'per_mi' ? (+t.per_mi || 0) : 0;
+}
+const isMetric = () => ['mnhr', 'per_hr', 'per_mi'].includes(mode);
+
+function scale(trips) {
+  const v = trips.map(metricVal).filter(n => isFinite(n) && n !== 0).sort((a, b) => a - b);
+  if (!v.length) return [0, 1];
+  let lo = v[Math.floor(v.length * 0.1)], hi = v[Math.max(0, Math.ceil(v.length * 0.9) - 1)];
+  if (!(hi > lo)) { lo = v[0]; hi = v[v.length - 1]; }
+  if (!(hi > lo)) hi = lo + 1;
+  return [lo, hi];
+}
+function colorFor(t) {
+  if (mode === 'default') return DEFAULT_C;
+  if (mode === 'state') return STATE_C[t.state] || '#64748b';
+  return ramp((metricVal(t) - LO) / (HI - LO));
+}
+const row = (a, b) => `<div class="r"><span>${a}</span><span>${b}</span></div>`;
+function tipFor(t) {
+  return `<b>#${t.n} · ${t.day || ''} ${t.time || ''}</b>`
+    + `<div style="opacity:.75">${t.svc || ''}</div>`
+    + `<div style="opacity:.75;margin-bottom:4px">${t.from || '?'} → ${t.to || '?'}</div>`
+    + row('Earned', money(t.earn))
+    + row('Trip', `${t.mins ? Math.round(t.mins) + ' min' : '?'}${t.mi ? ' · ' + t.mi.toFixed(1) + ' mi' : ''}`)
+    + row('Utilisation', Math.round((t.util || 0) * 100) + '% paid')
+    + row('ρ paid / true', money(t.rho) + ' / ' + money(t.rho_true))
+    + row('MNHR (true)', money(t.mnhr) + '/hr')
+    + row('£ per hour / mile', money(t.per_hr) + ' / ' + (t.per_mi ? money(t.per_mi) : 'n/a'))
+    + row('CNHR after trip', money(t.rn) + '/hr')
+    + row('Cumulative', money(t.cum_e) + ' · ' + (+t.cum_h || 0).toFixed(1) + 'h')
+    + `<div style="margin-top:3px;opacity:.8">State: ${STATE_L[t.state] || t.state || '—'} · recovery ${Math.round(t.rec || 0)}%</div>`;
+}
+
+function legend() {
+  const el = document.getElementById('mlegend');
+  const hint = '<span class="hint">click a route to isolate · click empty map to reset</span>';
+  if (mode === 'state') {
+    el.innerHTML = Object.keys(STATE_C).map(k =>
+      `<span class="swatch"><i style="background:${STATE_C[k]}"></i>${STATE_L[k]}</span>`).join('') + hint;
+  } else if (!isMetric()) {
+    el.innerHTML = `<span class="swatch"><i style="background:${DEFAULT_C}"></i>paid trip</span>`
+      + `<span class="swatch"><i style="background:${ENROUTE_C}"></i>en-route (unpaid)</span>` + hint;
+  } else {
+    const stops = [0, .25, .5, .75, 1].map(ramp).join(',');
+    el.innerHTML = `<span>${MLABEL[mode]}</span><span>${Math.round(LO * 100) / 100}</span>`
+      + `<span class="bar" style="background:linear-gradient(90deg,${stops})"></span>`
+      + `<span>${Math.round(HI * 100) / 100}</span>` + hint;
+  }
+}
+
+function draw() {
+  if (!WK) return;
+  const gps = WK.trips.filter(t => (t.trip && t.trip.length > 1) || (t.enroute && t.enroute.length > 1));
+  if (isMetric()) { const s = scale(gps); LO = s[0]; HI = s[1]; }
+  const shown = isolated ? gps.filter(t => t.n === isolated) : gps;
+  layerGroup.clearLayers();
+  const bounds = L.latLngBounds([]);
+  shown.forEach(t => {
+    const c = colorFor(t), tip = tipFor(t);
+    const wire = l => {
+      l.bindTooltip(tip, { sticky: true, direction: 'top', className: 'rt' });
+      l.on('click', e => { L.DomEvent.stopPropagation(e); lastClick = Date.now();
+        isolated = (isolated === t.n) ? null : t.n; draw(); });
+      l.addTo(layerGroup);
+      try { bounds.extend(l.getBounds ? l.getBounds() : l.getLatLng()); } catch (e) {}
+    };
+    if (t.enroute && t.enroute.length > 1)
+      wire(L.polyline(t.enroute, { color: ENROUTE_C, weight: 3, opacity: .75, dashArray: '8,6' }));
+    if (t.trip && t.trip.length > 1)
+      wire(L.polyline(t.trip, { color: c, weight: 4.5, opacity: .95 }));
+    if (t.pu) wire(L.circleMarker(t.pu, { radius: 4.5, color: '#fff', weight: 1.5, fillColor: c, fillOpacity: 1 }));
+    if (t.do) wire(L.circleMarker(t.do, { radius: 4.5, color: c, weight: 2, fillColor: '#fff', fillOpacity: 1 }));
+  });
+  if (bounds.isValid()) wmap.fitBounds(bounds, { padding: [30, 30], maxZoom: isolated ? 15 : 13 });
+
+  const st = document.getElementById('wkStats');
+  if (isolated) {
+    const t = gps.find(x => x.n === isolated);
+    st.innerHTML = `<b>Trip #${t.n}</b> — ${t.from || '?'} → ${t.to || '?'} · ${money(t.earn)}`
+      + ` · ${t.mi ? t.mi.toFixed(1) + ' mi' : ''} <span style="color:var(--s1)">click empty map to show all</span>`;
+  } else {
+    st.textContent = `${gps.length} of ${WK.trips.length} trips have a GPS route`;
+  }
+  document.querySelectorAll('#wkTable tr[data-n]').forEach(r =>
+    r.style.background = (+r.dataset.n === isolated) ? 'var(--page)' : '');
+  legend();
+}
+
+function selectWeek(i) {
+  WK = DATA.weeks[i];
+  isolated = null;
+  document.querySelectorAll('.wk').forEach((b, j) => b.classList.toggle('on', j === i));
+  document.getElementById('wkWhen').textContent = '— ' + WK.label;
+  document.getElementById('wkCards').innerHTML =
+    card(WK.n, 'trips', `${WK.gps} with GPS route`) +
+    card('£' + fmt(WK.earnings, 2), 'earnings', `${fmt(WK.hours, 1)} h paid`) +
+    card('£' + fmt(WK.rn, 2), 'CNHR', 'after £430 weekly cost') +
+    card('£' + fmt(WK.mnhr, 2), 'MNHR (EMA)', 'marginal rate') +
+    card(STATE_L[WK.state] || WK.state || '—', 'four-state', WK.be_trip ? `break-even @ #${WK.be_trip}` : 'no break-even');
+  document.getElementById('wkTable').innerHTML =
+    '<table><tr><th>#</th><th>Day</th><th>Time</th><th>Service</th><th>From → To</th>'
+    + '<th class="num">Earn</th><th class="num">Min</th><th class="num">Mi</th>'
+    + '<th class="num">£/hr</th><th class="num">£/mi</th><th class="num">CNHR</th><th>State</th></tr>'
+    + WK.trips.map(t => `<tr data-n="${t.n}" style="cursor:pointer">`
+      + `<td>${t.n}</td><td>${t.day || ''}</td><td>${t.time || ''}</td><td>${t.svc || ''}</td>`
+      + `<td style="color:var(--ink2)">${t.from || '?'} → ${t.to || '?'}</td>`
+      + `<td class="num">${money(t.earn)}</td><td class="num">${t.mins ? Math.round(t.mins) : '—'}</td>`
+      + `<td class="num">${t.mi ? t.mi.toFixed(1) : '—'}</td>`
+      + `<td class="num">${t.per_hr ? money(t.per_hr) : '—'}</td><td class="num">${t.per_mi ? money(t.per_mi) : '—'}</td>`
+      + `<td class="num">${money(t.rn)}</td>`
+      + `<td style="color:${STATE_C[t.state] || 'var(--ink2)'}">${STATE_L[t.state] || ''}</td></tr>`).join('')
+    + '</table>';
+  document.querySelectorAll('#wkTable tr[data-n]').forEach(r => r.addEventListener('click', () => {
+    const n = +r.dataset.n, t = WK.trips.find(x => x.n === n);
+    if (!t || !((t.trip && t.trip.length > 1) || (t.enroute && t.enroute.length > 1))) return;
+    isolated = (isolated === n) ? null : n; lastClick = Date.now(); draw();
+  }));
+  draw();
+}
+
+getJSON('data/weeks.json').then(d => {
+  DATA = d;
+  document.getElementById('wkCount').textContent =
+    `${d.weeks.length} weeks with GPS routes (${d.weeks.reduce((a, w) => a + w.gps, 0)} trips)`;
+  document.getElementById('weeks').innerHTML = d.weeks.map((w, i) =>
+    `<button class="wk" data-i="${i}"><div class="d1">${w.label}</div>`
+    + `<div class="d2">${w.gps} routes · £${fmt(w.earnings, 0)}</div></button>`).join('');
+  document.querySelectorAll('.wk').forEach(b => b.addEventListener('click', () => selectWeek(+b.dataset.i)));
+
+  wmap = L.map('wmap', { scrollWheelZoom: false }).setView([51.51, -0.09], 11);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    { attribution: '© OpenStreetMap, © CARTO', maxZoom: 18 }).addTo(wmap);
+  layerGroup = L.layerGroup().addTo(wmap);
+  wmap.on('click', () => { if (isolated != null && Date.now() - lastClick > 120) { isolated = null; draw(); } });
+
+  document.querySelectorAll('#modeBtns button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#modeBtns button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); mode = b.dataset.mode; draw();
+  }));
+
+  // default to the richest week
+  let best = 0; d.weeks.forEach((w, i) => { if (w.gps > d.weeks[best].gps) best = i; });
+  selectWeek(best);
+});
+</script>
+<script src="assets/nav.js?v=7"></script>
+</body>
+</html>

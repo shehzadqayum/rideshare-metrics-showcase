@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>EV running costs — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=6">
+<link rel="stylesheet" href="assets/style.css?v=7">
 </head>
 <body>
 <div class="wrap">
@@ -40,7 +40,7 @@
   <footer class="site">Tool: Python CLI over the Anthropic API, per-file extraction cache, 82 sessions
   across 19 locations and 4 providers.</footer>
 </div>
-<script src="assets/site.js?v=6"></script>
+<script src="assets/site.js?v=7"></script>
 <script>
 getJSON('data/charging.json').then(c => {
   document.getElementById('hero').innerHTML =
@@ -59,6 +59,6 @@ getJSON('data/charging.json').then(c => {
     Object.entries(c.by_time).map(([k, v]) => ({ label: k, short: k.split(' ')[0], v: v.sessions })), {});
 });
 </script>
-<script src="assets/nav.js?v=6"></script>
+<script src="assets/nav.js?v=7"></script>
 </body>
 </html>
