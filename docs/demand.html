@@ -16,58 +16,166 @@
 
   <div class="explain">
     <b>The idea.</b> Ride-share pricing “surges” when demand outstrips drivers — and demand in London is
-    largely created by identifiable events: a Tube line going down, 60,000 people leaving a football
-    match, trains cancelled in the rain. <b>Sentinel</b> polls Transport for London's APIs (ten
-    endpoints), National Rail feeds, football fixtures, Ticketmaster events and Met Office weather on a
-    loop, logging everything to a database. The hypothesis under test: <i>surge follows learnable
-    patterns, so shift timing and positioning can be chosen from transport data rather than guesswork</i>.
-    Below is one real captured snapshot from a driving evening — note the Bakerloo line down with severe
-    delays: exactly the kind of signal that puts extra passengers in cars.
+    largely created by identifiable events: a Tube line going down, 60,000 people leaving a football match,
+    trains cancelled in the rain. <b>Sentinel</b> polls Transport for London's APIs (ten endpoints), National
+    Rail feeds, football fixtures, Ticketmaster events and Met Office weather on a loop, logging everything to
+    a database. The hypothesis under test: <i>surge follows learnable patterns, so shift timing and
+    positioning can be chosen from transport data rather than guesswork</i>. Below is everything Sentinel
+    actually captured: a continuous 90-minute logging run, and full multi-source snapshots across several days.
   </div>
 
-  <div class="cards" id="hero"></div>
-
+  <h2>Continuous polling session — <span id="sessTitle"></span></h2>
+  <div class="explain">
+    This is the daemon doing its core job: sampling the <b>whole TfL network</b> every few minutes and
+    writing each cycle to SQLite. Watch the network-health line move as disruptions appear and clear — the
+    raw material for predicting where and when surge will follow.
+  </div>
+  <div class="cards" id="sessCards"></div>
   <div class="panel">
-    <h3>Tube / rail line status at snapshot</h3>
-    <div class="note" id="ts"></div>
-    <div class="linelist" id="lines"></div>
+    <h3>Network health across the session (%)</h3>
+    <div class="note" id="sessNote"></div>
+    <div id="sessChart"></div>
   </div>
 
+  <h2>Daily snapshots — <span id="capCount"></span></h2>
+  <div class="explain">
+    Each snapshot is one complete multi-source poll saved on a different day. Health here is the
+    <b>20 tube/rail lines</b> view. Note how it swings day to day — a quiet lunchtime at 95%, a disrupted
+    evening at 50%. Select any snapshot to see its full state.
+  </div>
+  <div class="panel">
+    <h3>Tube / rail health by snapshot (%)</h3>
+    <div class="note">Higher = fewer lines disrupted. Click a bar or a button below to open that snapshot.</div>
+    <div id="capChart"></div>
+  </div>
+  <div class="controls" id="capBtns"></div>
+  <div class="cards" id="capCards"></div>
+  <div class="panel">
+    <h3>Tube / rail line status</h3>
+    <div class="note" id="capTs"></div>
+    <div class="linelist" id="capLines"></div>
+  </div>
   <div class="row2">
-    <div class="panel">
-      <h3>Serious road disruptions (sample)</h3>
-      <div class="note">From the TfL road network feed</div>
-      <div id="roads" style="font-size:.82rem; color:var(--ink2); line-height:1.6"></div>
-    </div>
-    <div class="panel">
-      <h3>London fixtures that evening</h3>
-      <div class="note">Football feed, filtered to London clubs</div>
-      <div id="fixtures" style="font-size:.82rem; color:var(--ink2); line-height:1.6"></div>
-    </div>
+    <div class="panel"><h3>London fixtures</h3><div class="note">Football feed, London clubs</div>
+      <div id="capFix" style="font-size:.82rem;color:var(--ink2);line-height:1.6"></div></div>
+    <div class="panel"><h3>Notable road disruptions</h3><div class="note">TfL road network feed</div>
+      <div id="capRoad" style="font-size:.82rem;color:var(--ink2);line-height:1.6"></div></div>
   </div>
 
-  <footer class="site">Tool: Python daemon, SQLite, ten TfL endpoints + rail/fixtures/events/weather;
-  runs on a shift-length timer (e.g. --duration 8h).</footer>
+  <footer class="site">Data: docs/data/demand.json — Sentinel's SQLite log (session) and saved multi-source
+  snapshots (captures). Nothing mocked.</footer>
 </div>
 <script src="assets/site.js"></script>
 <script>
-getJSON('data/demand.json').then(s => {
-  document.getElementById('hero').innerHTML =
-    card(s.network_health_pct + '%', 'network health', s.disrupted_lines + ' of ' + s.total_lines + ' lines disrupted') +
-    card(fmt(s.road_total), 'road disruptions', 'TfL road network') +
-    card(fmt(s.station_issues_total), 'station issues', s.station_closures + ' closures') +
-    card(fmt(s.arrivals_tracked), 'live arrivals', s.arrival_stations + ' stations') +
-    card(fmt(s.events_total), 'events tracked', 'Ticketmaster feed') +
-    card(s.weather_temp != null ? s.weather_temp.toFixed(0) + '°C' : '—', 'weather', 'Met Office feed');
-  document.getElementById('ts').textContent = 'Captured ' + s.timestamp.replace('T', ' ').slice(0, 16) + ' — a real polling cycle, stored as data/live.json';
-  const sev = { 'Good Service': '--good', 'Minor Delays': '--warn', 'Part Closure': '--serious', 'Severe Delays': '--critical', 'Part Suspended': '--critical' };
-  document.getElementById('lines').innerHTML = s.lines.map(l =>
-    `<div class="lineitem" ${l.reason ? `title="${l.reason.replace(/"/g, '&quot;')}"` : ''}><span>${l.name}</span>
-     <span class="status" style="color:var(${sev[l.status] || '--muted'})">${l.status}</span></div>`).join('');
-  document.getElementById('roads').innerHTML = (s.road_serious || []).map(r =>
-    `<div style="margin-bottom:8px"><b style="color:var(--ink)">${r.category}</b> — ${r.location}<br><span style="color:var(--muted)">${r.comments}</span></div>`).join('') || '—';
-  document.getElementById('fixtures').innerHTML = (s.football_london || []).map(f =>
-    `<div>${f.home} v ${f.away} <span style="color:var(--muted)">· ${f.comp}</span></div>`).join('') || '—';
+const sev = { 'Good Service': '--good', 'Minor Delays': '--warn', 'Reduced Service': '--warn',
+  'Part Closure': '--serious', 'Part Suspended': '--serious', 'Severe Delays': '--critical',
+  'Suspended': '--critical', 'Planned Closure': '--serious' };
+
+// simple line chart for the session series
+function lineChart(el, pts, opts) {
+  const W = 940, H = 210, padL = 42, padB = 34, padT = 14, padR = 14;
+  const ys = pts.map(p => p.y);
+  let min = Math.min(...ys), max = Math.max(...ys);
+  const pad = (max - min) * 0.35 || 1; min -= pad; max += pad;
+  const X = i => padL + (W - padL - padR) * i / (pts.length - 1);
+  const Y = v => padT + (H - padT - padB) * (1 - (v - min) / (max - min));
+  let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%">`;
+  for (let k = 0; k <= 4; k++) {
+    const yv = min + (max - min) * k / 4, y = Y(yv);
+    s += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="${css('--grid')}" stroke-width="1"/>`;
+    s += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="${css('--muted')}">${yv.toFixed(0)}${opts.suf || ''}</text>`;
+  }
+  s += `<polyline points="${pts.map((p, i) => X(i) + ',' + Y(p.y)).join(' ')}" fill="none" stroke="${css('--s1')}" stroke-width="2"/>`;
+  pts.forEach((p, i) => {
+    s += `<circle cx="${X(i)}" cy="${Y(p.y)}" r="3.5" fill="${css('--s1')}" stroke="${css('--surface')}" stroke-width="1.5" data-tip="${p.label}"/>`;
+    if (i % 2 === 0) s += `<text x="${X(i)}" y="${H - padB + 14}" text-anchor="middle" font-size="8.5" fill="${css('--muted')}">${p.t}</text>`;
+  });
+  el.innerHTML = s + '</svg>';
+  bindTips(el);
+}
+
+// grouped bar chart for captures (health per snapshot), clickable
+function capBarChart(el, caps, onPick) {
+  const W = 940, H = 210, padL = 42, padB = 40, padT = 12, padR = 10;
+  const max = 100;
+  const iw = (W - padL - padR) / caps.length, bw = Math.min(70, iw - 14);
+  let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%">`;
+  for (let k = 0; k <= 4; k++) {
+    const y = padT + (H - padT - padB) * k / 4;
+    s += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="${css('--grid')}" stroke-width="1"/>`;
+    s += `<text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="${css('--muted')}">${100 - k * 25}%</text>`;
+  }
+  caps.forEach((c, i) => {
+    const h = ((c.health || 0) / max) * (H - padT - padB);
+    const x = padL + i * iw + (iw - bw) / 2, y = H - padB - h;
+    const col = c.health >= 85 ? css('--good') : c.health >= 65 ? css('--warn') : css('--critical');
+    s += `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="4" fill="${col}" style="cursor:pointer" data-i="${i}" data-tip="${c.date} ${c.time} — ${c.health}% · ${c.disrupted}/${c.total} disrupted"/>`;
+    s += `<text x="${x + bw / 2}" y="${y - 5}" text-anchor="middle" font-size="10" font-weight="600" fill="${css('--ink')}">${c.health}%</text>`;
+    s += `<text x="${x + bw / 2}" y="${H - padB + 14}" text-anchor="middle" font-size="8.5" fill="${css('--muted')}">${c.date.slice(8)}/${c.date.slice(5, 7)}</text>`;
+    s += `<text x="${x + bw / 2}" y="${H - padB + 25}" text-anchor="middle" font-size="8" fill="${css('--muted')}">${c.time}</text>`;
+  });
+  el.innerHTML = s + '</svg>';
+  bindTips(el);
+  el.querySelectorAll('rect[data-i]').forEach(r => r.addEventListener('click', () => onPick(+r.dataset.i)));
+}
+
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const dlabel = d => `${+d.slice(8)} ${MON[+d.slice(5, 7) - 1]}`;
+
+getJSON('data/demand.json').then(D => {
+  const S = D.session, C = D.captures;
+
+  // ---- session ----
+  document.getElementById('sessTitle').textContent = `${dlabel(S.date)} 2026, ${S.window[0]}–${S.window[1]}`;
+  document.getElementById('sessCards').innerHTML =
+    card(S.cycles, 'polling cycles', `every ~5 min`) +
+    card(S.lines_monitored, 'lines monitored', 'tube · overground · DLR · tram') +
+    card(fmt(S.road_locations), 'road disruptions', 'distinct locations') +
+    card(fmt(S.arrival_events), 'train arrivals logged', `${S.arrival_stations} key stations`);
+  const hv = S.series.map(p => p.health);
+  document.getElementById('sessNote').textContent =
+    `Across all ${S.series[0].total} TfL lines/routes · health ${Math.min(...hv)}–${Math.max(...hv)}% · ${S.series[0].disrupted}–${Math.max(...S.series.map(p=>p.disrupted))} disrupted`;
+  lineChart(document.getElementById('sessChart'),
+    S.series.map(p => ({ t: p.t, y: p.health, label: `${p.t} — ${p.health}% · ${p.disrupted} of ${p.total} disrupted` })),
+    { suf: '%' });
+
+  // ---- captures ----
+  document.getElementById('capCount').textContent =
+    `${C.length} snapshots across ${new Set(C.map(c => c.date)).size} days`;
+  capBarChart(document.getElementById('capChart'), C, select);
+
+  const btns = document.getElementById('capBtns');
+  btns.innerHTML = C.map((c, i) => `<button data-i="${i}">${dlabel(c.date)} ${c.time}</button>`).join('');
+  btns.querySelectorAll('button').forEach(b => b.addEventListener('click', () => select(+b.dataset.i)));
+
+  function select(i) {
+    const c = C[i];
+    btns.querySelectorAll('button').forEach((b, j) => b.classList.toggle('on', j === i));
+    document.getElementById('capCards').innerHTML =
+      card((c.health != null ? c.health + '%' : '—'), 'tube/rail health', `${c.disrupted} of ${c.total} disrupted`) +
+      card(fmt(c.road), 'road disruptions', 'TfL road network') +
+      card(fmt(c.station), 'station issues', `${c.closures ?? 0} closures`) +
+      card(fmt(c.arrivals), 'live arrivals', `${c.arrival_stations ?? '?'} stations`) +
+      card((c.events != null ? fmt(c.events) : '—'), 'events tracked', 'Ticketmaster') +
+      card((c.temp != null ? c.temp.toFixed(0) + '°C' : '—'), 'weather', 'Met Office') +
+      card((c.football_london ?? 0), 'London fixtures', `${c.football_total ?? '?'} nationwide`);
+    document.getElementById('capTs').textContent =
+      `Captured ${c.date} ${c.time} · sources: ${c.sources.join(', ')}`;
+    document.getElementById('capLines').innerHTML = c.lines.map(l =>
+      `<div class="lineitem" ${l.reason ? `title="${l.reason.replace(/"/g, '&quot;')}"` : ''}><span>${l.name}</span>
+       <span class="status" style="color:var(${sev[l.status] || '--muted'})">${l.status}</span></div>`).join('');
+    document.getElementById('capFix').innerHTML = (c.football_list || []).length
+      ? c.football_list.map(f => `<div>${f.home} v ${f.away} <span style="color:var(--muted)">· ${f.comp}</span></div>`).join('')
+      : '<span style="color:var(--muted)">none in this snapshot</span>';
+    document.getElementById('capRoad').innerHTML = (c.road_serious || []).length
+      ? c.road_serious.map(r => `<div style="margin-bottom:8px"><b style="color:var(--ink)">${r.category}</b> — ${r.location}<br><span style="color:var(--muted)">${r.comments}</span></div>`).join('')
+      : '<span style="color:var(--muted)">no serious-grade road disruptions in this snapshot</span>';
+  }
+
+  // default to the most-disrupted snapshot (most interesting to look at)
+  let worst = 0;
+  C.forEach((c, i) => { if ((c.health ?? 100) < (C[worst].health ?? 100)) worst = i; });
+  select(worst);
 });
 </script>
 </body>
