@@ -82,9 +82,12 @@
   </div>
   <div class="grp">Events, fixtures &amp; weather</div>
   <div class="cards mini" id="evtCards"></div>
+  <div class="note" style="margin:2px 0 8px">Fixtures and events are the <b>upcoming</b> schedule known at
+    capture time — a forward-looking demand signal — so the same matches recur across captures in the same
+    week and roll over when the week changes.</div>
   <div class="row2">
-    <div class="panel"><h3>London fixtures</h3><div id="fix" style="font-size:.82rem;color:var(--ink2);line-height:1.6"></div></div>
-    <div class="panel"><h3>Events next 6 hours</h3><div id="evt6" style="font-size:.82rem;color:var(--ink2);line-height:1.6"></div></div>
+    <div class="panel"><h3>Upcoming London fixtures</h3><div id="fix" style="font-size:.82rem;color:var(--ink2);line-height:1.6"></div></div>
+    <div class="panel"><h3>Events starting in the next 6 hours</h3><div id="evt6" style="font-size:.82rem;color:var(--ink2);line-height:1.6"></div></div>
   </div>
   <div class="cards mini" id="wxCards"></div>
 
@@ -125,6 +128,8 @@ const sev = { 'Good Service': '--good', 'Minor Delays': '--warn', 'Reduced Servi
   'Part Closure': '--serious', 'Part Suspended': '--serious', 'Severe Delays': '--critical', 'Suspended': '--critical' };
 const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const dlabel = d => `${+d.slice(8)} ${MON[+d.slice(5, 7) - 1]}`;
+const fdate = d => d ? `${+d.slice(8)} ${MON[+d.slice(5, 7) - 1]}` : 'upcoming';
+const etime = s => s ? (s.slice(11, 16) || '') : '';
 const na = '<span style="color:var(--muted)">not collected in this capture</span>';
 const kpi = (v, l, d) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div>${d ? `<div class="d">${d}</div>` : ''}</div>`;
 
@@ -220,9 +225,9 @@ getJSON('data/demand.json').then(D => {
       card((c.football_london ?? 0), 'London fixtures', `${c.football_total ?? '?'} nationwide`) +
       card(c.events_next6.length, 'events next 6h', 'starting soon');
     document.getElementById('fix').innerHTML = (c.football_list || []).length
-      ? c.football_list.map(f => `<div>${f.home} v ${f.away} <span style="color:var(--muted)">· ${f.comp}</span></div>`).join('') : na;
+      ? c.football_list.map(f => `<div><b style="color:var(--ink)">${fdate(f.date)}${f.kickoff ? ' ' + f.kickoff : ''}</b> — ${f.home} v ${f.away} <span style="color:var(--muted)">· ${f.comp}</span></div>`).join('') : na;
     document.getElementById('evt6').innerHTML = (c.events_next6 || []).length
-      ? c.events_next6.map(e => `<div>${e.name} <span style="color:var(--muted)">· ${e.venue}${e.cap ? ' · ' + fmt(e.cap) + ' cap' : ''}</span></div>`).join('') : na;
+      ? c.events_next6.map(e => `<div>${etime(e.start)} ${e.name} <span style="color:var(--muted)">· ${e.venue}${e.cap ? ' · ' + fmt(e.cap) + ' cap' : ''}</span></div>`).join('') : na;
     const w = c.weather;
     document.getElementById('wxCards').innerHTML = w ?
       card((w.temperature != null ? w.temperature.toFixed(1) + '°C' : '—'), 'temperature', w.feels_like != null ? `feels ${w.feels_like.toFixed(0)}°C` : '') +

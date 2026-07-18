@@ -103,6 +103,27 @@ def read_session():
 def data(x):
     return x.get('data') if isinstance(x, dict) else None
 
+def dedupe_fixtures(matches):
+    seen, out = set(), []
+    for m in sorted(matches, key=lambda x: (x.get('date') or '', x.get('kickoff') or '')):
+        key = (m.get('home_team'), m.get('away_team'), m.get('date'))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({'home': m.get('home_team'), 'away': m.get('away_team'), 'comp': m.get('competition'),
+                    'venue': m.get('venue'), 'date': m.get('date'), 'kickoff': m.get('kickoff')})
+    return out[:10]
+
+def dedupe_events(events):
+    seen, out = set(), []
+    for e in events:
+        key = (e.get('name'), e.get('venue'))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({'name': e.get('name'), 'venue': e.get('venue'), 'cap': e.get('capacity'), 'start': e.get('start')})
+    return out[:8]
+
 def read_capture(path):
     d = json.load(open(path, encoding='utf-8'))
     src = d.get('sources', {}); tfl = src.get('tfl', {})
@@ -169,9 +190,10 @@ def read_capture(path):
     for m in (fb.get('london_matches') or []):
         a = m.get('area')
         if a in GEO:
+            when = (m.get('date') or '') + (' ' + m.get('kickoff') if m.get('kickoff') else '')
             hotspots.append({'name': m.get('venue') or m.get('home_team'), 'lat': GEO[a][0], 'lon': GEO[a][1],
                              'weight': 0.7, 'type': 'fixture',
-                             'detail': f"{m.get('home_team')} v {m.get('away_team')} — football egress"})
+                             'detail': f"{m.get('home_team')} v {m.get('away_team')}<br>{when.strip()} — football egress"})
     if aviation:
         for ap in ('LHR', 'LGW', 'LCY', 'STN', 'LTN'):
             hotspots.append({'name': AIRPORT_NAME[ap] + ' Airport', 'lat': GEO[ap][0], 'lon': GEO[ap][1],
@@ -197,10 +219,8 @@ def read_capture(path):
         'air': {'index': aq.get('index'), 'summary': aq.get('summary')} if aq and not aq.get('is_outage') else None,
         'car_parks_outage': bool(cp.get('is_outage')),
         'aviation': aviation, 'rail': rail, 'weather': weather,
-        'football_list': [{'home': m.get('home_team'), 'away': m.get('away_team'), 'comp': m.get('competition')}
-                          for m in (fb.get('london_matches') or [])[:10]],
-        'events_next6': [{'name': e.get('name'), 'venue': e.get('venue'), 'cap': e.get('capacity'), 'start': e.get('start')}
-                         for e in (tm.get('next_6_hours') or [])[:8]],
+        'football_list': dedupe_fixtures(fb.get('london_matches') or []),
+        'events_next6': dedupe_events(tm.get('next_6_hours') or []),
         'events_by_type': {k: (len(v) if isinstance(v, list) else v) for k, v in (tm.get('by_type') or {}).items()},
         'road_serious': [{'location': x.get('location'), 'category': x.get('category'),
                           'comments': (x.get('comments') or '')[:150]}
