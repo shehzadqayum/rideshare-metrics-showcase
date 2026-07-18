@@ -185,6 +185,91 @@ def read_capture(path):
 SNAPS = ['20260207T0512-tfl.json', '20260207T0820-tfl.json', '20260208T0656-tfl.json',
          'full_report_20260209_184034.json', 'full_report.json', 'live.json']
 
+# approximate centroids (lat, lon) for the London postcode districts / airports in the data
+GEO = {
+    'TW6': (51.470, -0.453), 'TW8': (51.494, -0.297), 'SW6': (51.475, -0.196), 'E16': (51.508, 0.021),
+    'E20': (51.539, -0.016), 'SE25': (51.398, -0.078), 'SE16': (51.494, -0.052), 'N17': (51.603, -0.066),
+    'HA9': (51.556, -0.279), 'WC2': (51.513, -0.122), 'W1': (51.515, -0.141), 'SE10': (51.483, 0.005),
+    'SE1': (51.501, -0.090), 'N1': (51.538, -0.103), 'NW1': (51.535, -0.143), 'EC2': (51.518, -0.083),
+    'LHR': (51.470, -0.454), 'LGW': (51.154, -0.182), 'STN': (51.885, 0.235), 'LCY': (51.505, 0.055),
+    'LTN': (51.875, -0.368),
+}
+AIRPORT_NAME = {'LHR': 'Heathrow', 'LGW': 'Gatwick', 'STN': 'Stansted', 'LCY': 'London City', 'LTN': 'Luton'}
+SEV_W = {'Serious': 1.0, 'Severe': 1.0, 'Moderate': 0.55, 'Minimal': 0.28}
+
+def build_geo(fc, caps):
+    hotspots = []
+    # priority surge windows (weight by multiplier)
+    for w in (fc or {}).get('windows', []):
+        area = None
+        for t in w.get('tags', []):
+            m = re.match(r'\s*([A-Z]{1,2}\d{1,2})\b', t)
+            if m and m.group(1) in GEO:
+                area = m.group(1); loc = t; break
+        else:
+            loc = ''
+        if area:
+            mult = 0
+            mm = re.search(r'([\d.]+)', w.get('mult', ''))
+            if mm:
+                mult = float(mm.group(1))
+            hotspots.append({'name': w['title'], 'lat': GEO[area][0], 'lon': GEO[area][1],
+                             'weight': round(min(1.0, mult / 2.5), 2), 'type': 'surge',
+                             'detail': f"{loc} · {w.get('mult','')} surge"})
+    # airports (from the aviation surge_forecast if present, else all five)
+    airports = set()
+    for c in caps:
+        if c.get('aviation'):
+            airports |= {'LHR', 'LGW', 'STN', 'LCY', 'LTN'}
+    for a in (airports or {'LHR', 'LGW', 'LCY'}):
+        hotspots.append({'name': AIRPORT_NAME[a] + ' Airport', 'lat': GEO[a][0], 'lon': GEO[a][1],
+                         'weight': 0.7 if a in ('LHR', 'LGW') else 0.5, 'type': 'airport',
+                         'detail': 'International arrivals'})
+    # football fixtures from the richest capture (venue + area)
+    rich = max(caps, key=lambda c: len(c.get('football_list', [])), default=None)
+    seen = set()
+    if rich:
+        for f in rich.get('football_list', []):
+            # area comes from the source; look it up in the fixture text isn't available here, so map by known venue postcodes
+            pass
+    # fixtures need area codes -> pull from live snapshot football venues
+    for f in (fc_fixtures() or []):
+        if f['area'] in GEO and f['venue'] not in seen:
+            seen.add(f['venue'])
+            hotspots.append({'name': f['venue'], 'lat': GEO[f['area']][0], 'lon': GEO[f['area']][1],
+                             'weight': 0.6, 'type': 'fixture', 'detail': f"{f['home']} — football egress"})
+    # road-disruption points (real coords) from the richest capture that has them
+    road = []
+    src = None
+    for fn in ('live.json', 'full_report.json', 'full_report_20260209_184034.json'):
+        p = BASE + '/' + fn
+        if os.path.exists(p):
+            src = fn
+            d = json.load(open(p, encoding='utf-8'))
+            for x in (data((d.get('sources', {}).get('tfl') or {}).get('road_disruptions', {})) or {}).get('disruptions', []):
+                pt = x.get('point')
+                if isinstance(pt, str):
+                    m = re.findall(r'-?\d+\.\d+', pt)   # "[lon,lat]" as a string
+                    pt = [float(m[0]), float(m[1])] if len(m) >= 2 else None
+                if isinstance(pt, list) and len(pt) == 2:
+                    road.append([round(pt[1], 4), round(pt[0], 4), SEV_W.get(x.get('severity'), 0.28)])
+            break
+    return {'hotspots': hotspots, 'road': road, 'road_src': src}
+
+def fc_fixtures():
+    """London football fixtures with venue + area, from the richest live snapshot."""
+    for fn in ('live.json', 'full_report.json', 'full_report_20260209_184034.json'):
+        p = BASE + '/' + fn
+        if not os.path.exists(p):
+            continue
+        d = json.load(open(p, encoding='utf-8'))
+        fb = data((d.get('sources', {}).get('football') or {}).get('fixtures', {})) or {}
+        out = [{'venue': m.get('venue'), 'area': m.get('area'), 'home': m.get('home_team')}
+               for m in (fb.get('london_matches') or []) if m.get('area')]
+        if out:
+            return out
+    return []
+
 def main():
     caps = []
     for fn in SNAPS:
@@ -196,7 +281,8 @@ def main():
                 print('skip', fn, e)
     caps.sort(key=lambda c: c['ts'])
     fc = read_forecast()
-    out = {'forecast': fc, 'session': read_session(), 'captures': caps}
+    geo = build_geo(fc, caps)
+    out = {'forecast': fc, 'session': read_session(), 'captures': caps, 'geo': geo}
     json.dump(out, open(OUT, 'w'), separators=(',', ':'))
     print(f'demand.json: {os.path.getsize(OUT)/1024:.0f} KB')
     if fc:
