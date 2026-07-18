@@ -27,6 +27,25 @@
     from invoices back into the equation. The pages above walk through each layer.
   </div>
 
+  <h2>The framework behind it</h2>
+  <div class="explain">
+    <b>CNHR–MNHR</b> is the measurement framework the whole showcase rests on. A ride-share offer shows a
+    headline fare — say £12 for 25 minutes, apparently £28/hour — but that ignores the unpaid drive to the
+    pickup, the fixed weekly cost of running the vehicle, and whether the week is on track. Two metrics fix it:
+    <br><br>
+    <b>CNHR</b> (cost-normalised hourly rate, <span style="font-family:ui-monospace,monospace">rₙ = (Eₙ − C_w) / Hₙ</span>)
+    is backward-looking — after the week's fixed £430 of costs, what has each hour actually paid?
+    <b>MNHR</b> (marginal net hourly rate, <span style="font-family:ui-monospace,monospace">m = ρ − λ</span>, EMA-smoothed)
+    is forward-looking — is the next hour still worth working? Together they place the week on a
+    <b>four-state diagnostic</b>: sustained, accelerating recovery, decelerating, or stalled.
+    <br><br>
+    The headline empirical result: <b>weekly hours, not trip quality, set the ceiling on profitability</b> —
+    because the fixed cost is spread across whatever hours you work.
+    <br><br>
+    <a href="framework.html"><b>Full framework &amp; glossary of every term →</b></a>
+    &nbsp;·&nbsp; <a href="https://github.com/shehzadqayum/cnhr-mnhr-framework">reference implementation on GitHub</a>
+  </div>
+
   <h2>The tool suite</h2>
   <div class="tile-grid">
     <a class="tile" href="routes.html">

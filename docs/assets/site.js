@@ -6,6 +6,7 @@ const card = (v, l, d) => `<div class="card"><div class="v">${v}</div><div class
 // ---- nav ----
 const PAGES = [
   ['index.html', 'Overview'],
+  ['framework.html', 'Framework'],
   ['routes.html', 'Routes'],
   ['metrics.html', 'Trip metrics'],
   ['trips.html', 'Earnings'],

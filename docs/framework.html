@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The CNHR–MNHR framework — ride-share metrics</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .sym { font-family:ui-monospace,Consolas,monospace; font-weight:600; color:var(--ink); white-space:nowrap; }
+  .fml { font-family:ui-monospace,Consolas,monospace; background:var(--page); border:1px solid var(--border);
+    border-radius:8px; padding:10px 13px; font-size:.86rem; overflow-x:auto; margin:8px 0; }
+  .matrix { display:grid; grid-template-columns:150px 1fr 1fr; gap:8px; margin:10px 0; }
+  .matrix > div { padding:11px 13px; border-radius:9px; font-size:.84rem; border:1px solid var(--border); }
+  .matrix .hd { background:transparent; border-color:transparent; color:var(--muted); font-size:.74rem;
+    text-transform:uppercase; letter-spacing:.04em; display:flex; align-items:flex-end; }
+  .matrix .st { background:var(--surface); }
+  .matrix .st b { display:block; font-size:.9rem; margin-bottom:2px; }
+  .q { border-left:3px solid var(--s1); background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:14px 16px; margin:14px 0; font-size:.9rem; }
+  table td:first-child { width:120px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <h1>The CNHR–MNHR framework</h1>
+    <p class="sub">A formal way to answer the two questions a ride-share driver actually faces: <b>is this trip
+    worth taking?</b> and <b>is this shift still worth working?</b> — derived from 890+ London trips and
+    applied throughout this showcase.</p>
+  </header>
+
+  <div class="q">
+    <b>The problem it solves.</b> When an offer appears it shows a headline fare — say £12 for 25 minutes,
+    which looks like £28/hour. That number is misleading three ways: it ignores the unpaid drive <i>to</i> the
+    pickup, it ignores the fixed weekly cost of running the vehicle, and it says nothing about whether the
+    week as a whole is on track. CNHR and MNHR fix each of those in turn.
+  </div>
+
+  <h2>The two metrics</h2>
+  <div class="row2">
+    <div class="panel">
+      <h3>CNHR — Cost-Normalised Hourly Rate <span class="sym">rₙ</span></h3>
+      <div class="note">Backward-looking: “what has each hour actually paid so far?”</div>
+      <div class="fml">rₙ = (Eₙ − C_w) / Hₙ</div>
+      <p style="font-size:.86rem;color:var(--ink2)">Cumulative earnings minus the whole week's fixed cost,
+      divided by hours worked. It starts deeply negative (you owe the week's costs before you've earned
+      anything) and climbs as the week progresses. It answers <i>“am I actually ahead?”</i></p>
+    </div>
+    <div class="panel">
+      <h3>MNHR — Marginal Net Hourly Rate <span class="sym">m̃ₙ</span></h3>
+      <div class="note">Forward-looking: “is the next hour worth working?”</div>
+      <div class="fml">m = ρ − λ&nbsp;&nbsp;·&nbsp;&nbsp;m̃ₙ = α·m + (1−α)·m̃ₙ₋₁</div>
+      <p style="font-size:.86rem;color:var(--ink2)">The rate a trip earns <i>above</i> the cost of the time it
+      consumes, smoothed with an exponential moving average so one good or bad trip doesn't swing the signal.
+      It answers <i>“is the current pace still paying?”</i></p>
+    </div>
+  </div>
+
+  <div class="q"><b>Why both.</b> CNHR alone tells you where you stand but not where you're heading; MNHR alone
+  tells you the trend but not whether costs are covered. Read together they give a position <i>and</i> a
+  direction — which is exactly the four-state diagnostic below.</div>
+
+  <h2>Every term, defined</h2>
+  <div class="panel">
+    <h3>Constants</h3>
+    <div class="note">Calibrated empirically from the driving data</div>
+    <table>
+      <tr><th>Symbol</th><th>Value</th><th>Meaning</th></tr>
+      <tr><td class="sym">C_w</td><td>£430 / week</td><td>Fixed weekly cost — vehicle, insurance, phone, charging</td></tr>
+      <tr><td class="sym">r*</td><td>£15 / hr</td><td>Target hourly rate after costs</td></tr>
+      <tr><td class="sym">h̄</td><td>20.05 hr</td><td>Baseline paid hours per week</td></tr>
+      <tr><td class="sym">λ</td><td>≈ £21.45 / hr</td><td>Cost rate — <span class="sym">C_w / h̄</span>. What an hour of committed time costs</td></tr>
+      <tr><td class="sym">α</td><td>0.15</td><td>EMA smoothing factor for MNHR</td></tr>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h3>Per-trip terms</h3>
+    <div class="note">Computed for each trip <span class="sym">i</span></div>
+    <table>
+      <tr><th>Symbol</th><th>Formula</th><th>Meaning</th></tr>
+      <tr><td class="sym">e_i</td><td>—</td><td>Trip earnings (final, incl. tips and adjustments)</td></tr>
+      <tr><td class="sym">t_i</td><td>dropoff − pickup</td><td><b>Paid time</b> — the trip itself</td></tr>
+      <tr><td class="sym">t_en</td><td>pickup − accept</td><td><b>En-route time</b> — driving to collect, unpaid</td></tr>
+      <tr><td class="sym">t_true</td><td>t_i + t_en</td><td><b>Committed time</b> — everything the job consumed</td></tr>
+      <tr><td class="sym">util</td><td>t_i / t_true</td><td><b>Utilisation</b> (0–1) — share of committed time that was paid</td></tr>
+      <tr><td class="sym">ρ_paid</td><td>e_i / t_i</td><td>Gross rate on paid time only (the flattering number)</td></tr>
+      <tr><td class="sym">ρ_true</td><td>e_i / t_true</td><td>Gross rate on committed time (the honest one)</td></tr>
+      <tr><td class="sym">m_paid</td><td>ρ_paid − λ</td><td>Marginal net rate, paid basis</td></tr>
+      <tr><td class="sym">m_true</td><td>ρ_true − λ</td><td>Marginal net rate, true basis</td></tr>
+      <tr><td class="sym">m̃ₙ</td><td>α·m + (1−α)·m̃ₙ₋₁</td><td><b>MNHR</b> — the EMA-smoothed marginal rate</td></tr>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h3>Cumulative terms</h3>
+    <div class="note">Running totals after each trip <span class="sym">n</span></div>
+    <table>
+      <tr><th>Symbol</th><th>Formula</th><th>Meaning</th></tr>
+      <tr><td class="sym">Eₙ</td><td>Σ e_i</td><td>Cumulative earnings</td></tr>
+      <tr><td class="sym">Hₙ</td><td>Σ t_i</td><td>Cumulative paid hours</td></tr>
+      <tr><td class="sym">rₙ</td><td>(Eₙ − C_w) / Hₙ</td><td><b>CNHR</b> — cost-normalised hourly rate</td></tr>
+      <tr><td class="sym">Recovery %</td><td>(Eₙ / C_w) × 100</td><td>How much of the week's cost is recovered</td></tr>
+      <tr><td class="sym">BE trip</td><td>first Eₙ ≥ C_w</td><td><b>Break-even</b> — the trip that covers the week's costs</td></tr>
+      <tr><td class="sym">r* trip</td><td>first rₙ ≥ r*</td><td>The trip at which the target rate is reached</td></tr>
+    </table>
+  </div>
+
+  <h2>Phases</h2>
+  <div class="panel">
+    <div class="note">Where the week stands, from CNHR alone</div>
+    <table>
+      <tr><th>Phase</th><th>Condition</th><th>Meaning</th></tr>
+      <tr><td><b style="color:#dc2626">DEFICIT</b></td><td class="sym">rₙ &lt; 0</td><td>Still behind — costs not yet covered</td></tr>
+      <tr><td><b style="color:#d97706">RECOVERY</b></td><td class="sym">0 ≤ rₙ &lt; r*</td><td>Costs covered, working toward target</td></tr>
+      <tr><td><b style="color:#059669">TARGET</b></td><td class="sym">rₙ ≥ r*</td><td>At or above the target rate</td></tr>
+    </table>
+  </div>
+
+  <h2>The four-state diagnostic</h2>
+  <div class="note" style="margin-bottom:8px">Position (CNHR) × direction (MNHR trend). This is the signal the
+    dashboards colour-code each week by.</div>
+  <div class="matrix">
+    <div class="hd"></div>
+    <div class="hd">Improving — m̃_true &gt; rₙ</div>
+    <div class="hd">Deteriorating — m̃_true ≤ rₙ</div>
+    <div class="hd" style="align-items:center">Above target<br><span class="sym">rₙ ≥ r*</span></div>
+    <div class="st" style="border-left:3px solid #22c55e"><b style="color:#22c55e">SUSTAINED</b>
+      Above target and still pulling up. Keep doing exactly this.</div>
+    <div class="st" style="border-left:3px solid #d97706"><b style="color:#d97706">DECELERATING</b>
+      Above target but the marginal rate is dropping — the good position is eroding.</div>
+    <div class="hd" style="align-items:center">Below target<br><span class="sym">rₙ &lt; r*</span></div>
+    <div class="st" style="border-left:3px solid #059669"><b style="color:#059669">ACCEL RECOVERY</b>
+      Behind, but recent trips beat the average — momentum is closing the gap.</div>
+    <div class="st" style="border-left:3px solid #dc2626"><b style="color:#dc2626">STALLED</b>
+      Behind and not improving. Change something: area, hours, or trip selection.</div>
+  </div>
+  <div class="q">The value of the 2×2 is that a below-target week isn't automatically bad —
+    <b>ACCEL RECOVERY</b> says the week is being rescued, while <b>DECELERATING</b> warns that a
+    comfortable-looking week is quietly slipping.</div>
+
+  <h2>Volatility — how consistent was trip selection?</h2>
+  <div class="panel">
+    <table>
+      <tr><th>Symbol</th><th>Formula</th><th>Meaning</th></tr>
+      <tr><td class="sym">AM(ρ)</td><td>(1/n)·Σ ρ_paid</td><td>Arithmetic mean of trip rates</td></tr>
+      <tr><td class="sym">GM(ρ)</td><td>exp((1/n)·Σ ln ρ_paid)</td><td>Geometric mean — penalises bad trips more</td></tr>
+      <tr><td class="sym">AG gap</td><td>AM − GM</td><td>Spread between them = volatility</td></tr>
+    </table>
+    <div class="note" style="margin-top:8px">Reading the gap: <b>&gt; £4</b> high volatility (earnings swing a
+      lot trip to trip) · <b>&gt; £2</b> moderate · <b>≤ £2</b> disciplined, consistent trip selection.</div>
+  </div>
+
+  <h2>What the data showed</h2>
+  <div class="q">Across 17 weeks the binding constraint on profitability turned out to be <b>weekly hours, not
+    trip quality</b>. Because <span class="sym">C_w</span> is fixed, CNHR is dominated by the denominator
+    <span class="sym">Hₙ</span> — working more hours spreads the fixed cost further and lifts the rate far more
+    reliably than cherry-picking better-paying trips. That single finding reshaped the working pattern.</div>
+
+  <h2>See it applied</h2>
+  <div class="tile-grid">
+    <a class="tile" href="metrics.html"><div class="t">Trip metrics</div>
+      <div class="b">CNHR week by week, with the four-state colouring and the full weekly table.</div></a>
+    <a class="tile" href="dashboards/cnhr_dashboard.html"><div class="t">Full CNHR–MNHR dashboard</div>
+      <div class="b">The pipeline's own dashboard — per-trip curves, break-even markers, route maps.</div></a>
+    <a class="tile" href="https://github.com/shehzadqayum/cnhr-mnhr-framework">
+      <div class="t">Framework source →</div>
+      <div class="b">github.com/shehzadqayum/cnhr-mnhr-framework — the reference implementation (<span class="sym">/core</span>).</div></a>
+  </div>
+
+  <footer class="site">Constants: C_w £430/wk · r* £15/hr · α 0.15 · h̄ 20.05h · λ £21.45/hr.
+  Definitions match the pipeline's metrics engine.</footer>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
