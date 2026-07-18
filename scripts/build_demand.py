@@ -219,15 +219,22 @@ def read_capture(path):
                              'weight': 0.85 if ap in ('LHR', 'LGW') else 0.55, 'type': 'airport',
                              'detail': 'International arrivals'})
 
-    # national rail termini markers (per-station disruption messages)
+    # national rail termini markers — per-station live punctuality + advisory
     rail_stations = []
     nr_st = (data((src.get('national_rail') or {}).get('departure_board', {})) or {}).get('stations') or {}
     for crs, info in (nr_st.items() if isinstance(nr_st, dict) else []):
         if crs not in RAIL_GEO:
             continue
-        msgs = [m.strip() for m in (info.get('nrcc_messages') or []) if m.strip()]
+        svcs = info.get('services') or []
+        cancelled = sum(1 for s in svcs if s.get('is_cancelled') or s.get('etd') == 'Cancelled')
+        ontime = sum(1 for s in svcs if s.get('etd') == 'On time')
+        delayed = len(svcs) - ontime - cancelled
+        nxt = svcs[0] if svcs else None
+        msgs = [clean(re.sub(r'<[^>]+>', ' ', m)) for m in (info.get('nrcc_messages') or []) if m.strip()]
         rail_stations.append({'name': RAIL_GEO[crs][2], 'lat': RAIL_GEO[crs][0], 'lon': RAIL_GEO[crs][1],
-                              'msgs': len(msgs), 'detail': (msgs[0][:160] if msgs else 'No advisories')})
+                              'total': len(svcs), 'ontime': ontime, 'delayed': delayed, 'cancelled': cancelled,
+                              'next': (f"{nxt.get('std','')} → {nxt.get('destination','')}" if nxt else ''),
+                              'msg': (msgs[0][:150] if msgs else '')})
 
     # road-disruption markers (Serious + Moderate only, to stay legible) with hover detail
     road_markers = []
