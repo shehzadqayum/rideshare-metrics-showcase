@@ -236,11 +236,9 @@ def read_capture(path):
                               'next': (f"{nxt.get('std','')} → {nxt.get('destination','')}" if nxt else ''),
                               'msg': (msgs[0][:150] if msgs else '')})
 
-    # road-disruption markers (Serious + Moderate only, to stay legible) with hover detail
+    # road-disruption markers (ALL severities; styled small->large by severity in the UI)
     road_markers = []
     for x in (rd.get('disruptions') or []):
-        if x.get('severity') not in ('Serious', 'Severe', 'Moderate'):
-            continue
         pt = x.get('point')
         if isinstance(pt, str):
             mm = re.findall(r'-?\d+\.\d+', pt)

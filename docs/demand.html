@@ -54,7 +54,7 @@
 
   <div class="panel">
     <h3>London at this capture <span id="mapWhen" style="font-weight:400;color:var(--muted);font-size:.8rem"></span></h3>
-    <div class="note">Heat = live road-disruption density. Bubbles = demand hotspots (football venues, airports). Click any bubble.</div>
+    <div class="note">Heat = road-disruption density. Every disruption is also a marker (dot size = severity), alongside rail termini and demand hotspots. Hover any marker for detail.</div>
     <div class="maprow">
       <div id="map"></div>
       <div class="mapside">
@@ -62,7 +62,7 @@
         <div class="hs"><span class="dot" style="background:#4da6ff"></span>Airport arrivals</div>
         <div class="hs"><span class="dot" style="background:#44d488"></span>Football venue (near-term)</div>
         <div class="hs"><span class="dot" style="background:#7c3aed"></span>Rail terminus</div>
-        <div class="hs"><span class="dot" style="background:#e11d48"></span>Road disruption</div>
+        <div class="hs"><span class="dot" style="width:7px;height:7px;background:#e11d48"></span><span class="dot" style="width:5px;height:5px;background:#f59e42"></span><span class="dot" style="width:3px;height:3px;background:#64748b"></span>Road: serious·moderate·minor</div>
         <h4 style="margin-top:12px">Road congestion</h4>
         <div class="hs"><span style="width:70px;height:11px;border-radius:3px;flex:0 0 auto;background:linear-gradient(90deg,#2c7bb6,#3fa34d,#f5c542,#f59e42,#f5564a)"></span>low → high density</div>
         <label class="hs" style="cursor:pointer;margin-top:8px"><input type="checkbox" id="heatToggle" checked> show congestion heat</label>
@@ -196,10 +196,13 @@ getJSON('data/demand.json').then(D => {
         gradient: { 0.15: '#2c7bb6', 0.35: '#3fa34d', 0.55: '#f5c542', 0.75: '#f59e42', 1.0: '#f5564a' } });
     if (heatOn) heatLayer.addTo(map);
     markerGroup.clearLayers();
-    // road-disruption markers (smallest, under everything)
+    // road-disruption markers — every severity, sized/styled so minor ones stay unobtrusive
     (c.road_markers || []).forEach(r => {
-      const col = /Serious|Severe/.test(r.sev) ? '#e11d48' : '#f59e42';
-      L.circleMarker([r.lat, r.lon], { pane: 'markers', radius: 5, color: '#fff', weight: 2, fillColor: col, fillOpacity: 1 })
+      const serious = /Serious|Severe/.test(r.sev), moderate = /Moderate/.test(r.sev);
+      const st = serious ? { c: '#e11d48', r: 6, w: 2, o: 1 }
+        : moderate ? { c: '#f59e42', r: 4.5, w: 1.5, o: 0.95 }
+          : { c: '#64748b', r: 2.5, w: 0, o: 0.55 };
+      L.circleMarker([r.lat, r.lon], { pane: 'markers', radius: st.r, color: '#fff', weight: st.w, fillColor: st.c, fillOpacity: st.o })
         .bindTooltip(`<b>${r.cat}</b> · ${r.sev}<br>${r.loc}${r.note ? '<br><span style="opacity:.8">' + r.note + '</span>' : ''}`, { direction: 'top', sticky: true })
         .addTo(markerGroup);
     });
