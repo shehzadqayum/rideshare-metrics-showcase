@@ -33,18 +33,22 @@ const REPORTS = [
     `<span style="flex:1"></span>` +
     `<div class="navdd">` +
       `<button class="ddbtn${isReport ? ' on' : ''}" id="ddbtn" aria-haspopup="true" aria-expanded="false">Generated reports <span class="chev">▾</span></button>` +
-      `<div class="ddmenu" id="ddmenu">` +
+      `<div class="ddmenu" id="ddmenu" style="display:none">` +
         REPORTS.map(([h, t, s]) =>
           `<a href="${up}${h}" class="${h.split('/').pop() === here ? 'on' : ''}"><b>${t}</b><span>${s}</span></a>`).join('') +
       `</div></div></div>`;
   document.body.prepend(el);
   const btn = el.querySelector('#ddbtn'), menu = el.querySelector('#ddmenu');
-  const close = () => { menu.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); };
+  // drive visibility inline so the menu still works if a stale stylesheet is cached
+  const close = () => { menu.style.display = 'none'; menu.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); };
   btn.addEventListener('click', e => {
     e.stopPropagation();
-    const open = menu.classList.toggle('open');
+    const open = menu.style.display !== 'block';
+    menu.style.display = open ? 'block' : 'none';
+    menu.classList.toggle('open', open);
     btn.setAttribute('aria-expanded', String(open));
   });
+  menu.addEventListener('click', e => e.stopPropagation());
   document.addEventListener('click', close);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   const tip = document.createElement('div');
