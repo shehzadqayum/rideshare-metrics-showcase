@@ -60,7 +60,7 @@
       <div class="mapside">
         <h4>Markers <span style="font-weight:400;text-transform:none">— hover for detail</span></h4>
         <div class="hs"><span class="dot" style="background:#0891b2"></span>Airport arrivals</div>
-        <div class="hs"><span class="dot" style="background:#db2777"></span>Football venue (near-term)</div>
+        <div class="hs"><span class="dot" style="background:#db2777"></span>Football venue (that day)</div>
         <div class="hs"><span class="dot" style="background:#7c3aed"></span>Rail terminus <span style="color:var(--muted)">(dashed = disrupted)</span></div>
         <div class="hs"><span class="dot" style="background:#334155"></span>Road disruption <span style="color:var(--muted)">(fainter = minor)</span></div>
         <h4 style="margin-top:12px">Road congestion</h4>
@@ -85,11 +85,10 @@
   </div>
   <div class="grp">Events, fixtures &amp; weather</div>
   <div class="cards mini" id="evtCards"></div>
-  <div class="note" style="margin:2px 0 8px">Fixtures and events are the <b>upcoming</b> schedule known at
-    capture time — a forward-looking demand signal — so the same matches recur across captures in the same
-    week and roll over when the week changes.</div>
+  <div class="note" style="margin:2px 0 8px">Only fixtures and events happening on the captured day are
+    shown — a day with no London match simply has none.</div>
   <div class="row2">
-    <div class="panel"><h3>Upcoming London fixtures</h3><div id="fix" style="font-size:.82rem;color:var(--ink2);line-height:1.6"></div></div>
+    <div class="panel"><h3>London fixtures that day</h3><div id="fix" style="font-size:.82rem;color:var(--ink2);line-height:1.6"></div></div>
     <div class="panel"><h3>Events starting in the next 6 hours</h3><div id="evt6" style="font-size:.82rem;color:var(--ink2);line-height:1.6"></div></div>
   </div>
   <div class="cards mini" id="wxCards"></div>

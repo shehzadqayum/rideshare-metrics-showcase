@@ -104,8 +104,8 @@ def read_session():
 def data(x):
     return x.get('data') if isinstance(x, dict) else None
 
-def near_term(cap_date, fx_date, days=3):
-    """True if the fixture date is within `days` on/after the capture date."""
+def near_term(cap_date, fx_date, days=0):
+    """True if the fixture falls on the capture's own day (days=0 => same day only)."""
     if not cap_date or not fx_date:
         return False
     try:
