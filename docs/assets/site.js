@@ -4,6 +4,7 @@ const fmt = (n, dp = 0) => n == null ? '—' : n.toLocaleString('en-GB', { minim
 const card = (v, l, d) => `<div class="card"><div class="v">${v}</div><div class="l">${l}</div>${d ? `<div class="d">${d}</div>` : ''}</div>`;
 
 // ---- nav ----
+// site sections, shown inline
 const PAGES = [
   ['index.html', 'Overview'],
   ['framework.html', 'Framework'],
@@ -12,23 +13,40 @@ const PAGES = [
   ['trips.html', 'Earnings'],
   ['demand.html', 'Demand'],
   ['charging.html', 'EV costs'],
-  ['|', 'Generated'],                                            // separator
-  ['dashboards/cnhr_dashboard.html', 'CNHR dashboard'],
-  ['dashboards/surge_report.html', 'Surge report'],
-  ['dashboards/cnhr_week_20260209.html', 'Week deep dive'],
+];
+// pipeline-generated artifacts, grouped in a dropdown
+const REPORTS = [
+  ['dashboards/cnhr_dashboard.html', 'CNHR–MNHR dashboard', '17 weeks · 762 trips'],
+  ['dashboards/cnhr_week_20260209.html', 'Single-week deep dive', 'week of 9 Feb 2026'],
+  ['dashboards/surge_report.html', 'Surge intelligence report', 'hourly forecast'],
 ];
 (function nav() {
   const here = location.pathname.split('/').pop() || 'index.html';
-  // pages in /dashboards need to climb a level to reach the site pages
+  // pages inside /dashboards must climb a level to reach the site pages
   const up = /\/dashboards\//.test(location.pathname) ? '../' : '';
+  const isReport = REPORTS.some(([h]) => h.split('/').pop() === here);
   const el = document.createElement('nav');
   el.className = 'site';
-  el.innerHTML = `<div class="wrap"><span class="brand">Ride-share metrics</span>` +
-    PAGES.map(([h, t]) => h === '|'
-      ? `<span class="navsep">${t}</span>`
-      : `<a href="${up}${h}" class="${h.split('/').pop() === here ? 'on' : ''}">${t}</a>`).join('') +
-    `<span style="flex:1"></span><a href="https://github.com/" id="ghlink" style="display:none">GitHub</a></div>`;
+  el.innerHTML = `<div class="wrap">` +
+    `<a class="brand" href="${up}index.html">Ride-share metrics</a>` +
+    PAGES.map(([h, t]) => `<a href="${up}${h}" class="${h === here ? 'on' : ''}">${t}</a>`).join('') +
+    `<span style="flex:1"></span>` +
+    `<div class="navdd">` +
+      `<button class="ddbtn${isReport ? ' on' : ''}" id="ddbtn" aria-haspopup="true" aria-expanded="false">Generated reports <span class="chev">▾</span></button>` +
+      `<div class="ddmenu" id="ddmenu">` +
+        REPORTS.map(([h, t, s]) =>
+          `<a href="${up}${h}" class="${h.split('/').pop() === here ? 'on' : ''}"><b>${t}</b><span>${s}</span></a>`).join('') +
+      `</div></div></div>`;
   document.body.prepend(el);
+  const btn = el.querySelector('#ddbtn'), menu = el.querySelector('#ddmenu');
+  const close = () => { menu.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); };
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = menu.classList.toggle('open');
+    btn.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', close);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
   const tip = document.createElement('div');
   tip.id = 'tip';
   document.body.append(tip);
