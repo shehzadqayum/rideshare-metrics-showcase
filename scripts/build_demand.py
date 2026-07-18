@@ -154,9 +154,34 @@ def read_capture(path):
                                            'precipitation_prob', 'uv_index', 'visibility')}
         weather['desc'] = cur.get('weather_code') or cur.get('description')
 
+    # road-disruption points (real coords) for this capture's heatmap
+    road = []
+    for x in (rd.get('disruptions') or []):
+        pt = x.get('point')
+        if isinstance(pt, str):
+            m = re.findall(r'-?\d+\.\d+', pt)
+            pt = [float(m[0]), float(m[1])] if len(m) >= 2 else None
+        if isinstance(pt, list) and len(pt) == 2:
+            road.append([round(pt[1], 4), round(pt[0], 4), SEV_W.get(x.get('severity'), 0.28)])
+
+    # demand-hotspot markers for this capture: football venues + (if aviation) airports
+    hotspots = []
+    for m in (fb.get('london_matches') or []):
+        a = m.get('area')
+        if a in GEO:
+            hotspots.append({'name': m.get('venue') or m.get('home_team'), 'lat': GEO[a][0], 'lon': GEO[a][1],
+                             'weight': 0.7, 'type': 'fixture',
+                             'detail': f"{m.get('home_team')} v {m.get('away_team')} — football egress"})
+    if aviation:
+        for ap in ('LHR', 'LGW', 'LCY', 'STN', 'LTN'):
+            hotspots.append({'name': AIRPORT_NAME[ap] + ' Airport', 'lat': GEO[ap][0], 'lon': GEO[ap][1],
+                             'weight': 0.85 if ap in ('LHR', 'LGW') else 0.55, 'type': 'airport',
+                             'detail': 'International arrivals'})
+
     ts = d.get('timestamp', '')
     return {
         'ts': ts, 'date': ts[:10], 'time': ts[11:16], 'sources': list(src.keys()),
+        'road_points': road, 'hotspots': hotspots,
         # headline (kept for the demand overview)
         'health': ls.get('network_health_pct'), 'disrupted': ls.get('disrupted_lines'), 'total': ls.get('total_lines'),
         'road': rd.get('total'), 'station': sd.get('total'), 'closures': sd.get('closure_count'),
@@ -281,8 +306,7 @@ def main():
                 print('skip', fn, e)
     caps.sort(key=lambda c: c['ts'])
     fc = read_forecast()
-    geo = build_geo(fc, caps)
-    out = {'forecast': fc, 'session': read_session(), 'captures': caps, 'geo': geo}
+    out = {'forecast': fc, 'session': read_session(), 'captures': caps}
     json.dump(out, open(OUT, 'w'), separators=(',', ':'))
     print(f'demand.json: {os.path.getsize(OUT)/1024:.0f} KB')
     if fc:

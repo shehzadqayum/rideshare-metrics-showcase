@@ -7,53 +7,57 @@
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
+  .daybar { position:sticky; top:44px; z-index:4; background:var(--page); padding:10px 0 8px; border-bottom:1px solid var(--border); margin-bottom:14px; }
+  .daybar .lab { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px; }
+  .days { display:flex; gap:8px; flex-wrap:wrap; }
+  .day { background:var(--surface); border:1px solid var(--border); border-radius:9px; padding:8px 13px; cursor:pointer;
+    text-align:left; font:inherit; color:var(--ink); line-height:1.25; }
+  .day:hover { border-color:var(--s1); }
+  .day.on { border-color:var(--s1); background:color-mix(in srgb, var(--s1) 12%, var(--surface)); }
+  .day .d1 { font-weight:650; font-size:.9rem; }
+  .day .d2 { font-size:.72rem; color:var(--muted); }
   .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:14px 0; }
-  .kpi { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:11px 13px;
-    border-left:3px solid var(--s1); }
-  .kpi .v { font-size:1.3rem; font-weight:650; letter-spacing:-.01em; }
-  .kpi .l { color:var(--muted); font-size:.72rem; margin-top:2px; }
-  .kpi .d { font-size:.72rem; color:var(--ink2); margin-top:1px; }
+  .kpi { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:11px 13px; border-left:3px solid var(--s1); }
+  .kpi .v { font-size:1.3rem; font-weight:650; letter-spacing:-.01em; } .kpi .l { color:var(--muted); font-size:.72rem; margin-top:2px; } .kpi .d { font-size:.72rem; color:var(--ink2); margin-top:1px; }
   #map { height:440px; border-radius:10px; border:1px solid var(--border); }
-  .maprow { display:grid; grid-template-columns:1fr 230px; gap:12px; }
-  @media (max-width:820px){ .maprow{ grid-template-columns:1fr; } #map{height:340px;} }
-  .mapside h4 { font-size:.75rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:2px 0 6px; }
+  .maprow { display:grid; grid-template-columns:1fr 220px; gap:12px; }
+  @media (max-width:820px){ .maprow{ grid-template-columns:1fr; } #map{height:340px;} .daybar{ position:static; } }
+  .mapside h4 { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:2px 0 6px; }
   .hs { display:flex; align-items:center; gap:7px; font-size:.78rem; padding:3px 0; color:var(--ink2); }
   .hs .dot { width:11px; height:11px; border-radius:50%; flex:0 0 auto; }
   .heat { display:grid; grid-template-columns:96px repeat(17,1fr); gap:2px; min-width:720px; }
-  .heat .h { font-size:.68rem; color:var(--muted); text-align:center; }
-  .heat .lab { font-size:.72rem; color:var(--ink2); display:flex; align-items:center; font-weight:600; }
-  .heat .lab.comp { color:var(--ink); }
-  .heat .cell { height:22px; border-radius:3px; }
-  .win { display:grid; grid-template-columns:34px 90px 1fr auto; gap:12px; align-items:center;
-    padding:9px 0; border-bottom:1px solid var(--grid); font-size:.85rem; }
+  .heat .h { font-size:.68rem; color:var(--muted); text-align:center; } .heat .lab { font-size:.72rem; color:var(--ink2); display:flex; align-items:center; font-weight:600; } .heat .lab.comp { color:var(--ink); } .heat .cell { height:22px; border-radius:3px; }
+  .win { display:grid; grid-template-columns:34px 90px 1fr auto; gap:12px; align-items:center; padding:9px 0; border-bottom:1px solid var(--grid); font-size:.85rem; }
   .win:last-child { border-bottom:0; }
-  .win .rk { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center;
-    font-weight:700; border:1px solid var(--border); }
-  .win .tm { font-size:.78rem; color:var(--ink2); }
-  .win .nm { font-weight:600; } .win .wh { color:var(--muted); font-size:.78rem; }
-  .win .mx { font-weight:700; font-size:1.05rem; text-align:right; }
+  .win .rk { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:700; border:1px solid var(--border); }
+  .win .tm { font-size:.78rem; color:var(--ink2); } .win .nm { font-weight:600; } .win .wh { color:var(--muted); font-size:.78rem; } .win .mx { font-weight:700; font-size:1.05rem; text-align:right; }
   .grp { font-size:.72rem; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); margin:20px 0 6px; }
   .mini .card { padding:9px 11px; }
+  .divider { border-top:1px solid var(--border); margin:30px 0 0; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header class="page">
     <h1>Surge dashboard</h1>
-    <p class="sub">Sentinel turns London's live transport, aviation, events and weather into an hourly surge
-    forecast — where and when demand will outrun drivers.</p>
+    <p class="sub">Sentinel turns London's live transport, aviation, events and weather into demand
+    intelligence. Pick a capture to see the city's full state at that moment.</p>
   </header>
+
+  <div class="daybar">
+    <div class="lab">Select a capture — <span id="capCount"></span></div>
+    <div class="days" id="days"></div>
+  </div>
 
   <div class="kpis" id="kpis"></div>
 
   <div class="panel">
-    <h3>Surge map <span style="font-weight:400;color:var(--muted);font-size:.8rem">— demand hotspots &amp; live road congestion</span></h3>
-    <div class="note">Bubbles = predicted demand (bigger = stronger). Heat = live road disruptions. Click any bubble for detail.</div>
+    <h3>London at this capture <span id="mapWhen" style="font-weight:400;color:var(--muted);font-size:.8rem"></span></h3>
+    <div class="note">Heat = live road-disruption density. Bubbles = demand hotspots (football venues, airports). Click any bubble.</div>
     <div class="maprow">
       <div id="map"></div>
       <div class="mapside">
         <h4>Demand hotspots</h4>
-        <div class="hs"><span class="dot" style="background:#f5564a"></span>Priority surge window</div>
         <div class="hs"><span class="dot" style="background:#4da6ff"></span>Airport arrivals</div>
         <div class="hs"><span class="dot" style="background:#44d488"></span>Football / event egress</div>
         <h4 style="margin-top:12px">Road congestion</h4>
@@ -64,30 +68,6 @@
     </div>
   </div>
 
-  <div class="panel">
-    <h3>Hourly surge forecast</h3>
-    <div class="note">Predicted intensity by signal and hour. <a id="fullReport" href="dashboards/surge_report.html">Full report →</a></div>
-    <div style="overflow-x:auto"><div class="heat" id="heat"></div></div>
-    <div class="legend" id="heatLegend" style="margin-top:8px"></div>
-  </div>
-
-  <div class="row2">
-    <div class="panel"><h3>Priority surge windows</h3><div id="windows"></div></div>
-    <div class="panel"><h3>Recommended positioning</h3><div class="note">Optimised shift plan</div><div id="strategy"></div></div>
-  </div>
-
-  <h2>The live feeds behind it</h2>
-  <div class="note" style="margin-bottom:6px">Everything above is built from real captured data — a continuous
-    logging session and multi-source snapshots. Pick a capture for its full metric set.</div>
-
-  <div class="panel">
-    <h3>Network health — 90-minute session <span style="font-weight:400;color:var(--muted);font-size:.8rem" id="sessTitle"></span></h3>
-    <div class="note" id="sessNote"></div>
-    <div id="sessChart"></div>
-  </div>
-
-  <div class="controls" id="capBtns"></div>
-  <div class="kpis mini" id="head"></div>
   <div class="grp">Transport for London</div>
   <div class="cards mini" id="tflCards"></div>
   <div class="row2">
@@ -108,14 +88,36 @@
   </div>
   <div class="cards mini" id="wxCards"></div>
 
-  <footer class="site">Data: docs/data/demand.json — Sentinel's generated surge report, SQLite session log,
-  and every saved multi-source capture. Map: OpenStreetMap / CARTO. Nothing mocked.</footer>
+  <div class="divider"></div>
+  <h2>Surge forecast <span style="font-weight:400;color:var(--muted);font-size:.8rem" id="fcTitle"></span></h2>
+  <div class="note" style="margin-bottom:8px">A separate worked example — the hour-by-hour forecast the system
+    generates from all the feeds above. <a id="fullReport" href="dashboards/surge_report.html">Full report →</a></div>
+  <div class="panel">
+    <h3>Hourly intensity by signal</h3>
+    <div style="overflow-x:auto"><div class="heat" id="heat"></div></div>
+    <div class="legend" id="heatLegend" style="margin-top:8px"></div>
+  </div>
+  <div class="row2">
+    <div class="panel"><h3>Priority surge windows</h3><div id="windows"></div></div>
+    <div class="panel"><h3>Recommended positioning</h3><div id="strategy"></div></div>
+  </div>
+
+  <div class="divider"></div>
+  <h2>Continuous logging session <span style="font-weight:400;color:var(--muted);font-size:.8rem" id="sessTitle"></span></h2>
+  <div class="panel">
+    <h3>Network health across the session (%)</h3>
+    <div class="note" id="sessNote"></div>
+    <div id="sessChart"></div>
+  </div>
+
+  <footer class="site">Data: docs/data/demand.json — every saved multi-source capture, the generated surge
+  report, and the SQLite session log. Map: OpenStreetMap / CARTO. Nothing mocked.</footer>
 </div>
 <script src="assets/site.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script>
-const HEAT = ['rgba(137,135,129,.16)', '#3fa34d', '#f5c542', '#f59e42', '#f5564a'];
+const HEATC = ['rgba(137,135,129,.16)', '#3fa34d', '#f5c542', '#f59e42', '#f5564a'];
 const HEATNAME = ['Baseline', 'Low', 'Moderate', 'High', 'Very High'];
 const MULTCOL = { red: '#f5564a', orange: '#f59e42', yellow: '#f5c542', blue: '#4da6ff', green: '#44d488', purple: '#b07aff' };
 const TYPECOL = { surge: '#f5564a', airport: '#4da6ff', fixture: '#44d488' };
@@ -142,83 +144,54 @@ function lineChart(el, pts, opts) {
   el.innerHTML = s + '</svg>'; bindTips(el);
 }
 
+let map, heatLayer, markerGroup, heatOn = true;
+
 getJSON('data/demand.json').then(D => {
-  const F = D.forecast, S = D.session, C = D.captures, G = D.geo;
-  const latest = C[C.length - 1];
+  const F = D.forecast, S = D.session, C = D.captures;
 
-  // ---------- KPIs ----------
-  const w1 = (F && F.windows[0]) || {};
-  const peakTime = (w1.tags || []).find(t => /\d\d:\d\d/.test(t)) || '';
-  document.getElementById('kpis').innerHTML =
-    kpi(w1.mult || '—', 'peak surge', `${w1.title || ''}`) +
-    kpi(peakTime || '—', 'peak window', 'strongest predicted hour') +
-    kpi((latest.health != null ? latest.health + '%' : '—'), 'network health', `${latest.disrupted}/${latest.total} lines disrupted · ${dlabel(latest.date)}`) +
-    kpi(fmt((G.road || []).length), 'road disruptions', 'live, mapped') +
-    kpi(G.hotspots.filter(h => h.type === 'surge').length, 'surge hotspots', 'ranked & mapped');
-
-  // ---------- map ----------
-  const map = L.map('map', { scrollWheelZoom: false }).setView([51.505, -0.11], 10);
+  // ----- map init -----
+  map = L.map('map', { scrollWheelZoom: false }).setView([51.505, -0.11], 10);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
     { attribution: '© OpenStreetMap, © CARTO', maxZoom: 18 }).addTo(map);
-  const heat = L.heatLayer((G.road || []).map(p => [p[0], p[1], p[2]]),
-    { radius: 24, blur: 20, minOpacity: 0.25, max: 1.0,
-      gradient: { 0.2: '#3fa34d', 0.5: '#f5c542', 0.8: '#f59e42', 1: '#f5564a' } }).addTo(map);
-  const markers = L.layerGroup().addTo(map);
-  G.hotspots.forEach(h => {
-    L.circleMarker([h.lat, h.lon], {
-      radius: 6 + h.weight * 12, color: '#fff', weight: 1.5, fillColor: TYPECOL[h.type], fillOpacity: 0.9
-    }).bindPopup(`<b>${h.name}</b><br>${h.detail}`).addTo(markers);
-  });
-  document.getElementById('mapSrc').textContent = 'Road heat from the ' +
-    (G.road_src || '').replace('.json', '') + ' capture (' + (G.road || []).length + ' points).';
+  markerGroup = L.layerGroup().addTo(map);
   document.getElementById('heatToggle').addEventListener('change', e => {
-    if (e.target.checked) heat.addTo(map); else map.removeLayer(heat);
+    heatOn = e.target.checked;
+    if (heatLayer) { if (heatOn) heatLayer.addTo(map); else map.removeLayer(heatLayer); }
   });
 
-  // ---------- forecast heatmap ----------
-  if (F) {
-    document.getElementById('fullReport').href = 'dashboards/surge_report.html';
-    let h = '<div></div>' + F.hours.map(x => `<div class="h">${x}</div>`).join('');
-    F.heatmap.forEach(row => {
-      const comp = /composite/i.test(row.cat);
-      h += `<div class="lab${comp ? ' comp' : ''}">${row.cat}</div>` +
-        row.levels.map((v, i) => `<div class="cell" style="background:${HEAT[v]}" data-tip="${row.cat} · ${F.hours[i]}:00 — ${HEATNAME[v]}"></div>`).join('');
-    });
-    const he = document.getElementById('heat'); he.innerHTML = h; bindTips(he);
-    document.getElementById('heatLegend').innerHTML = HEATNAME.map((n, i) => `<span><span class="sw" style="background:${HEAT[i]}"></span>${n}</span>`).join('');
+  // ----- day selector -----
+  document.getElementById('capCount').textContent = `${C.length} captures across ${new Set(C.map(c => c.date)).size} days (7–16 Feb 2026)`;
+  const days = document.getElementById('days');
+  days.innerHTML = C.map((c, i) =>
+    `<button class="day" data-i="${i}"><div class="d1">${dlabel(c.date)}</div><div class="d2">${c.time} · ${c.sources.length} feeds</div></button>`).join('');
+  days.querySelectorAll('.day').forEach(b => b.addEventListener('click', () => select(+b.dataset.i)));
 
-    document.getElementById('windows').innerHTML = F.windows.map(w => {
-      const tm = (w.tags || []).find(t => /\d\d:\d\d/.test(t)) || '';
-      const loc = (w.tags || [])[1] || '';
-      return `<div class="win"><div class="rk" style="border-color:${MULTCOL[w.mcolor]};color:${MULTCOL[w.mcolor]}">${w.rank}</div>
-        <div class="tm">${tm}</div>
-        <div><div class="nm">${w.title}</div><div class="wh">${loc}</div></div>
-        <div class="mx" style="color:${MULTCOL[w.mcolor]}">${w.mult}</div></div>`;
-    }).join('');
-    document.getElementById('strategy').innerHTML = F.strategy.length ?
-      '<table><tr><th>Time</th><th>Position</th><th class="num">Mult.</th></tr>' +
-      F.strategy.map(r => `<tr><td>${r.time}</td><td>${r.location}</td><td class="num">${r.mult}</td></tr>`).join('') + '</table>' : '';
-  }
-
-  // ---------- session ----------
-  document.getElementById('sessTitle').textContent = `${dlabel(S.date)} 2026, ${S.window[0]}–${S.window[1]}`;
-  const dv = S.series.map(p => p.disrupted);
-  document.getElementById('sessNote').textContent =
-    `${S.cycles} cycles every ~5 min · all ${S.series[0].total} TfL routes · disrupted ${Math.min(...dv)}–${Math.max(...dv)} · ${fmt(S.arrival_events)} arrivals logged`;
-  lineChart(document.getElementById('sessChart'),
-    S.series.map(p => ({ t: p.t, y: p.health, label: `${p.t} — ${p.health}% · ${p.disrupted} of ${p.total} disrupted` })), { suf: '%' });
-
-  // ---------- captures ----------
-  const btns = document.getElementById('capBtns');
-  btns.innerHTML = C.map((c, i) => `<button data-i="${i}">${dlabel(c.date)} ${c.time}</button>`).join('');
-  btns.querySelectorAll('button').forEach(b => b.addEventListener('click', () => select(+b.dataset.i)));
   function select(i) {
     const c = C[i];
-    btns.querySelectorAll('button').forEach((b, j) => b.classList.toggle('on', j === i));
-    document.getElementById('head').innerHTML =
-      kpi(dlabel(c.date) + ' ' + c.time, 'capture', c.sources.length + ' providers') +
-      kpi((c.health != null ? c.health + '%' : '—'), 'tube/rail health', `${c.disrupted}/${c.total} disrupted`) +
-      kpi(fmt(c.arrivals), 'train arrivals', `${c.arrival_stations ?? '?'} stations`);
+    days.querySelectorAll('.day').forEach((b, j) => b.classList.toggle('on', j === i));
+
+    // KPIs (this capture)
+    document.getElementById('kpis').innerHTML =
+      kpi((c.health != null ? c.health + '%' : '—'), 'network health', `${c.disrupted}/${c.total} lines disrupted`) +
+      kpi(fmt(c.road), 'road disruptions', 'mapped below') +
+      kpi(fmt(c.arrivals), 'live train arrivals', `${c.arrival_stations ?? '?'} stations`) +
+      kpi((c.events != null ? fmt(c.events) : '—'), 'ticketed events', `${c.football_london ?? 0} London fixtures`) +
+      kpi((c.weather && c.weather.temperature != null ? c.weather.temperature.toFixed(0) + '°C' : '—'), 'weather', c.weather && c.weather.precipitation_prob != null ? `${c.weather.precipitation_prob}% rain` : '');
+
+    // map (this capture)
+    document.getElementById('mapWhen').textContent = `— ${dlabel(c.date)} ${c.time}`;
+    if (heatLayer) map.removeLayer(heatLayer);
+    heatLayer = L.heatLayer((c.road_points || []).map(p => [p[0], p[1], p[2]]),
+      { radius: 24, blur: 20, minOpacity: 0.25, max: 1.0, gradient: { 0.2: '#3fa34d', 0.5: '#f5c542', 0.8: '#f59e42', 1: '#f5564a' } });
+    if (heatOn) heatLayer.addTo(map);
+    markerGroup.clearLayers();
+    (c.hotspots || []).forEach(h => L.circleMarker([h.lat, h.lon],
+      { radius: 6 + h.weight * 11, color: '#fff', weight: 1.5, fillColor: TYPECOL[h.type], fillOpacity: 0.9 })
+      .bindPopup(`<b>${h.name}</b><br>${h.detail}`).addTo(markerGroup));
+    document.getElementById('mapSrc').textContent =
+      `${(c.road_points || []).length} road disruptions · ${(c.hotspots || []).length} demand hotspots`;
+
+    // TfL
     document.getElementById('tflCards').innerHTML =
       card(fmt(c.road), 'road disruptions', Object.entries(c.road_by_severity || {}).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(' · ') || 'TfL') +
       card(fmt(c.station), 'station issues', `${c.closures ?? 0} closures`) +
@@ -230,6 +203,8 @@ getJSON('data/demand.json').then(D => {
     document.getElementById('ld').innerHTML = c.line_disruptions.length ? c.line_disruptions.map(l =>
       `<div style="margin-bottom:8px"><b style="color:var(--ink)">${l.line}</b> — <span style="color:var(${sev[l.status] || '--muted'})">${l.status}</span><br><span style="color:var(--muted)">${l.reason}</span></div>`).join('')
       : '<span style="color:var(--muted)">no active line disruptions</span>';
+
+    // getting around
     document.getElementById('aroundCards').innerHTML =
       (c.bikes ? card(fmt(c.bikes.bikes), 'Santander bikes', `${c.bikes.pct}% of ${fmt(c.bikes.docks)} docks free`) : card('—', 'cycle hire', 'not collected')) +
       (c.ev ? card(`${c.ev.available}/${c.ev.total}`, 'EV points free', `${c.ev.pct}% available`) : card('—', 'EV charging', 'not collected')) +
@@ -238,6 +213,8 @@ getJSON('data/demand.json').then(D => {
       `<div class="cards mini" style="margin:0">${card(fmt(c.aviation.arrivals), 'arrivals/hr', `${fmt(c.aviation.international)} intl`)}${card(c.aviation.surge_rating || '—', 'aviation surge', 'AirLabs')}${card(fmt(c.aviation.cancellations), 'cancellations', `${fmt(c.aviation.delays)} delays`)}</div>` : na;
     document.getElementById('rail').innerHTML = c.rail ?
       `<div class="cards mini" style="margin:0">${card(c.rail.services != null ? Math.round(100 * c.rail.on_time / c.rail.services) + '%' : '—', 'on time', `${c.rail.on_time}/${c.rail.services}`)}${card(fmt(c.rail.avg_delay) + 'm', 'avg delay', `${c.rail.cancelled} cancelled`)}${card(fmt(c.rail.incidents), 'incidents', 'active')}</div>` : na;
+
+    // events & weather
     document.getElementById('evtCards').innerHTML =
       card(fmt(c.events), 'ticketed events', Object.entries(c.events_by_type || {}).slice(0, 2).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(' · ') || 'Ticketmaster') +
       card((c.football_london ?? 0), 'London fixtures', `${c.football_total ?? '?'} nationwide`) +
@@ -254,6 +231,36 @@ getJSON('data/demand.json').then(D => {
       card((w.uv_index != null ? w.uv_index : '—'), 'UV index', w.visibility != null ? `${fmt(w.visibility)} m vis` : '')
       : card('—', 'weather', 'not collected');
   }
+
+  // ----- static: forecast -----
+  if (F) {
+    document.getElementById('fcTitle').textContent = '— ' + F.title.replace(/^Surge Report \|\s*/, '');
+    document.getElementById('fullReport').href = 'dashboards/surge_report.html';
+    let h = '<div></div>' + F.hours.map(x => `<div class="h">${x}</div>`).join('');
+    F.heatmap.forEach(row => { const comp = /composite/i.test(row.cat);
+      h += `<div class="lab${comp ? ' comp' : ''}">${row.cat}</div>` +
+        row.levels.map((v, i) => `<div class="cell" style="background:${HEATC[v]}" data-tip="${row.cat} · ${F.hours[i]}:00 — ${HEATNAME[v]}"></div>`).join(''); });
+    const he = document.getElementById('heat'); he.innerHTML = h; bindTips(he);
+    document.getElementById('heatLegend').innerHTML = HEATNAME.map((n, i) => `<span><span class="sw" style="background:${HEATC[i]}"></span>${n}</span>`).join('');
+    document.getElementById('windows').innerHTML = F.windows.map(w => {
+      const tm = (w.tags || []).find(t => /\d\d:\d\d/.test(t)) || ''; const loc = (w.tags || [])[1] || '';
+      return `<div class="win"><div class="rk" style="border-color:${MULTCOL[w.mcolor]};color:${MULTCOL[w.mcolor]}">${w.rank}</div>
+        <div class="tm">${tm}</div><div><div class="nm">${w.title}</div><div class="wh">${loc}</div></div>
+        <div class="mx" style="color:${MULTCOL[w.mcolor]}">${w.mult}</div></div>`; }).join('');
+    document.getElementById('strategy').innerHTML = F.strategy.length ?
+      '<table><tr><th>Time</th><th>Position</th><th class="num">Mult.</th></tr>' +
+      F.strategy.map(r => `<tr><td>${r.time}</td><td>${r.location}</td><td class="num">${r.mult}</td></tr>`).join('') + '</table>' : '';
+  }
+
+  // ----- static: session -----
+  document.getElementById('sessTitle').textContent = `— ${dlabel(S.date)} 2026, ${S.window[0]}–${S.window[1]}`;
+  const dv = S.series.map(p => p.disrupted);
+  document.getElementById('sessNote').textContent =
+    `${S.cycles} cycles every ~5 min · all ${S.series[0].total} TfL routes · disrupted ${Math.min(...dv)}–${Math.max(...dv)} · ${fmt(S.arrival_events)} arrivals logged`;
+  lineChart(document.getElementById('sessChart'),
+    S.series.map(p => ({ t: p.t, y: p.health, label: `${p.t} — ${p.health}% · ${p.disrupted} of ${p.total} disrupted` })), { suf: '%' });
+
+  // default to the richest capture
   let rich = 0; C.forEach((c, i) => { if (c.sources.length >= C[rich].sources.length) rich = i; });
   select(rich);
 });
