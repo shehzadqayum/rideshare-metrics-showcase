@@ -83,6 +83,36 @@ def rdp(points, eps=0.00008):  # ~9 m
     return [points[i] for i in range(len(points)) if keep[i]]
 
 # ---------------------------------------------------------------- helpers
+# Published tracks must never begin at a habitual origin: the first en-route
+# point of a shift is wherever the driver accepted the job, which for the first
+# trip of the day is home. Clip the leading HEAD_TRIM_M of every en-route leg so
+# no start point survives; legs shorter than that are dropped outright.
+HEAD_TRIM_M = 500.0
+
+def metres(a, b):
+    p1, p2 = math.radians(a[0]), math.radians(b[0])
+    x = (math.sin((p2 - p1) / 2) ** 2
+         + math.cos(p1) * math.cos(p2) * math.sin(math.radians(b[1] - a[1]) / 2) ** 2)
+    return 2 * 6371000.0 * math.asin(math.sqrt(x))
+
+def trim_head(track, dist=HEAD_TRIM_M):
+    """Drop leading points until `dist` from the raw origin; [] if too short."""
+    if not track:
+        return []
+    for i, p in enumerate(track):
+        if metres(track[0], p) >= dist:
+            return track[i:]
+    return []
+
+# Area labels must stay at locality/outcode granularity. The comma-split
+# fallback below can surface a street or a building entrance when the source
+# address has no locality in the expected position, so anything that still
+# looks like a street, venue or pick-up bay is demoted to plain "London".
+STREETY = re.compile(
+    r'(\bstreet\b|\bst\b|\broad\b|\brd\b|\blane\b|\bln\b|\bavenue\b|\bave\b|\bclose\b|'
+    r'\bdrive\b|\bgardens\b|\bcourt\b|\bway\b|\bwharf\b|\bentrance\b|\bexit\b|'
+    r'\bpick-?up\b|\bplatform|\bparking\b|\blevel\b|\bstation\b|--|\[)', re.I)
+
 AREA_RE = re.compile(r'([A-Z]{1,2}[0-9][0-9A-Z]?)\s*[0-9][A-Z]{2}$')
 def area(addr):
     if not addr:
@@ -92,6 +122,8 @@ def area(addr):
     parts = [p.strip() for p in addr.split(',')]
     loc = parts[-2] if len(parts) >= 2 else (parts[0] if parts else '')
     loc = re.sub(r'\b[A-Z]{1,2}[0-9][0-9A-Z]?\s*[0-9]?[A-Z]{0,2}\b', '', loc).strip() or 'London'
+    if STREETY.search(loc):
+        loc = 'London'
     return f'{loc} {out}'.strip()
 
 def earn_val(t):
@@ -146,7 +178,7 @@ def main():
             tid = t.get('trip_id')
             ts = t.get('timestamps') or {}
             acc, pick, drop = ttime(ts.get('accept')), ttime(ts.get('pickup')), ttime(ts.get('dropoff'))
-            enr = rdp(slice_track(pts, keys, acc, pick))
+            enr = trim_head(rdp(slice_track(pts, keys, acc, pick)))
             trp = rdp(slice_track(pts, keys, pick, drop))
             has = len(trp) >= 2 or len(enr) >= 2
             met = t.get('metrics') or {}
@@ -223,7 +255,7 @@ def main():
             depth -= 1
             if depth == 0: end = k + 1; break
     W = json.loads(s[a:end])
-    assigned = flagged = 0
+    assigned = flagged = relabelled = 0
     for w in W:
         wk = w['key'].replace('-', '')
         mf = mfiles.get(wk)
@@ -231,6 +263,16 @@ def main():
         aligned = len(mt) == len(w['trips'])
         for i, dt in enumerate(w['trips']):
             tid = mt[i]['trip_id'] if (aligned and i < len(mt)) else None
+            # The generator truncates addresses mid-word, so area() cannot re-parse
+            # them; take the already-reduced label where the join gives us one and
+            # demote anything street- or venue-shaped otherwise.
+            info = daily_info.get(tid) if tid else None
+            for fld, src in (('pickup', 'from'), ('dropoff', 'to')):
+                if info and info.get(src):
+                    if dt.get(fld) != info[src]:
+                        dt[fld] = info[src]; relabelled += 1
+                elif STREETY.search(dt.get(fld) or ''):
+                    dt[fld] = 'London'; relabelled += 1
             tr = tracks_by_id.get(tid) if tid else None
             if tr and (len(tr['trip']) >= 2 or len(tr['enroute']) >= 2):
                 dt['trip_track'] = tr['trip']
@@ -247,6 +289,7 @@ def main():
     blob = json.dumps(W, separators=(',', ':'))
     s = s[:a] + blob + s[end:]
     open(p, 'w', encoding='utf-8').write(s)
-    print(f'dashboard: {assigned} trips with tracks, {flagged} flagged no_gps; {os.path.getsize(p)/1024:.0f} KB')
+    print(f'dashboard: {assigned} trips with tracks, {flagged} flagged no_gps, '
+          f'{relabelled} labels reduced; {os.path.getsize(p)/1024:.0f} KB')
 
 main()
