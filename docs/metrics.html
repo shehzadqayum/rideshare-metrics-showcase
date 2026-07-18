@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Trip-selection metrics — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=5">
+<link rel="stylesheet" href="assets/style.css?v=6">
 </head>
 <body>
 <div class="wrap">
@@ -31,6 +31,9 @@
     space; browser automation supplies the final settled earnings from the portal (tips and adjustments
     included); parsed charging invoices supply the cost side. The pipeline then computes per-trip and
     weekly metrics and classifies each week into one of four states.
+    <br><br>
+    <a href="framework.html"><b>Full CNHR–MNHR framework &amp; glossary of every term →</b></a>
+    &nbsp;·&nbsp; <a href="https://github.com/shehzadqayum/cnhr-mnhr-framework">reference implementation on GitHub</a>
   </div>
 
   <div class="cards" id="hero"></div>
@@ -65,7 +68,7 @@
 
   <footer class="site">Constants: weekly cost £430, target £15/h, EMA α = 0.15, baseline 20.05 h/week.</footer>
 </div>
-<script src="assets/site.js?v=5"></script>
+<script src="assets/site.js?v=6"></script>
 <script>
 getJSON('data/metrics.json').then(m => {
   const w = m.weekly;
@@ -83,6 +86,6 @@ getJSON('data/metrics.json').then(m => {
     '</table>';
 });
 </script>
-<script src="assets/nav.js?v=5"></script>
+<script src="assets/nav.js?v=6"></script>
 </body>
 </html>

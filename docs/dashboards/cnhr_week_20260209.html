@@ -394,6 +394,27 @@ buildTripList();
 showAll();
 drawChart();
 </script>
-<script src="../assets/nav.js?v=5"></script>
+<script src="../assets/nav.js?v=6"></script>
+<!--FWLINK-->
+<script>
+(function(){
+  function add(){
+    if (document.getElementById('fwbar')) return;
+    var d = document.createElement('div');
+    d.id = 'fwbar';
+    d.style.cssText = 'max-width:1120px;margin:0 auto;padding:9px 20px;font-size:.8rem;' +
+      'font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#94a3b8';
+    d.innerHTML = 'Metrics on this page follow the <b style="color:#e8edf4">CNHR–MNHR framework</b> — ' +
+      '<a href="../framework.html" style="color:#4da6ff">what every term means</a> · ' +
+      '<a href="https://github.com/shehzadqayum/cnhr-mnhr-framework" style="color:#4da6ff">reference implementation on GitHub</a>';
+    var nav = document.querySelector('.rsnav');
+    if (nav && nav.nextSibling) nav.parentNode.insertBefore(d, nav.nextSibling);
+    else document.body.insertBefore(d, document.body.firstChild);
+  }
+  window.addEventListener('load', function(){ setTimeout(add, 120); });
+  setTimeout(add, 200);
+})();
+</script>
+<!--/FWLINK-->
 </body>
 </html>
