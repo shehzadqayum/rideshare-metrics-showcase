@@ -116,6 +116,25 @@ def main():
     week_cov = {}                # weekkey -> {label, trips, gps}
     total = gps = 0
 
+    # addresses live in the daily trips_*.json (not the metrics files) — index by trip_id
+    daily_info = {}              # trip_id -> {'from','to','trip_min'}
+    for tf in glob.glob(BASE + '/uber_screen/reports/trips_*.json'):
+        try:
+            dd = json.load(open(tf, encoding='utf-8'))
+        except Exception:
+            continue
+        for t in dd.get('trips', []):
+            tid = t.get('trip_id')
+            if not tid:
+                continue
+            seg = (t.get('segments') or {}).get('trip') or {}
+            dur = (seg.get('actual') or {}).get('duration_minutes')
+            daily_info[tid] = {
+                'from': area((t.get('pickup') or {}).get('address')),
+                'to': area((t.get('dropoff') or {}).get('address')),
+                'trip_min': dur,
+            }
+
     # need week labels from the dashboard var W? use metrics week_label
     for wk, mf in sorted(mfiles.items()):
         m = json.load(open(mf, encoding='utf-8'))
@@ -132,13 +151,29 @@ def main():
             has = len(trp) >= 2 or len(enr) >= 2
             met = t.get('metrics') or {}
             svc = (t.get('service') or '').upper() or None
+            info = daily_info.get(tid, {})
+            mi = met.get('trip_miles') or t.get('trip_miles')
+            if not mi and len(trp) >= 2:   # fall back to measuring the GPS track itself
+                tot = 0.0
+                for j in range(len(trp) - 1):
+                    la1, lo1 = trp[j]; la2, lo2 = trp[j + 1]
+                    dla = math.radians(la2 - la1); dlo = math.radians(lo2 - lo1)
+                    aa = math.sin(dla / 2) ** 2 + math.cos(math.radians(la1)) * math.cos(math.radians(la2)) * math.sin(dlo / 2) ** 2
+                    tot += 2 * 3958.8 * math.asin(math.sqrt(aa))
+                mi = round(tot, 2)
+            mins = (info.get('trip_min')
+                    or met.get('trip_duration_minutes')
+                    or (round((drop - pick) / 60.0, 1) if (pick and drop and drop > pick) else None)
+                    or ((t.get('gps_tracks') or {}).get('summary') or {}).get('total_duration_minutes'))
+            mph = round(mi / (mins / 60.0), 1) if (mi and mins and mins > 0) else None
             props_common = {
                 'trip': tid, 'service': svc,
-                'mi': met.get('trip_miles') or t.get('trip_miles'),
-                'min': met.get('trip_duration_minutes') or ((t.get('gps_tracks') or {}).get('summary') or {}).get('total_duration_minutes'),
+                'mi': round(mi, 2) if mi else mi,
+                'min': round(mins, 1) if mins else mins,
+                'mph': mph,
                 'gbp': earn_val(t),
-                'from': area((t.get('pickup') or {}).get('address')),
-                'to': area((t.get('dropoff') or {}).get('address')),
+                'from': info.get('from', ''),
+                'to': info.get('to', ''),
             }
             if has:
                 gps += 1; wg += 1
