@@ -60,8 +60,9 @@
 let DATA, map, layer, mode = 'seg';
 const segColor = { trip: '#2a78d6', enroute: '#8a8a85', deadhead: '#e34948' };
 const svcColor = { UBERX: '#2a78d6', ELECTRIC: '#1baf7a', COMFORT: '#eda100', UBERX_RESERVE: '#4a3aa7', UBERX_PRIORITY: '#eb6834' };
+// £/mile value ramp — distinct hues (red=low earnings/mi → green=high), all readable on a light basemap
 const ppmRamp = v => v == null ? '#8a8a85' :
-  v < 1 ? '#cde2fb' : v < 2 ? '#86b6ef' : v < 3 ? '#3987e5' : v < 4 ? '#1c5cab' : '#0d366b';
+  v < 1 ? '#d73027' : v < 2 ? '#fc8d59' : v < 3 ? '#d9a406' : v < 4 ? '#66bd63' : '#1a7a3a';
 
 function styleFor(p) {
   if (mode === 'seg') return { color: segColor[p.seg] || '#8a8a85', weight: p.seg === 'trip' ? 3 : 2, opacity: p.seg === 'trip' ? .85 : .5 };
@@ -79,11 +80,11 @@ function legend() {
   else if (mode === 'service') el.innerHTML = Object.entries(svcColor)
     .map(([k, v]) => `<span><span class="sw" style="background:${v}"></span>${k.toLowerCase().replace('_', ' ')}</span>`).join('');
   else el.innerHTML =
-    `<span><span class="sw" style="background:#cde2fb"></span>&lt;£1/mi</span>
-     <span><span class="sw" style="background:#86b6ef"></span>£1–2</span>
-     <span><span class="sw" style="background:#3987e5"></span>£2–3</span>
-     <span><span class="sw" style="background:#1c5cab"></span>£3–4</span>
-     <span><span class="sw" style="background:#0d366b"></span>£4+/mi</span>
+    `<span><span class="sw" style="background:#d73027"></span>&lt;£1/mi</span>
+     <span><span class="sw" style="background:#fc8d59"></span>£1–2</span>
+     <span><span class="sw" style="background:#d9a406"></span>£2–3</span>
+     <span><span class="sw" style="background:#66bd63"></span>£3–4</span>
+     <span><span class="sw" style="background:#1a7a3a"></span>£4+/mi</span>
      <span><span class="sw" style="background:#8a8a85"></span>en-route/unknown</span>`;
 }
 
@@ -127,10 +128,15 @@ getJSON('data/routes.json').then(d => {
       `with the GPS tracker not running, so no route exists to draw. Nothing is invented; a trip with no recorded track simply isn't plotted.`;
   }
   const sel = document.getElementById('daySel');
-  Object.keys(d.days).sort().forEach(k => {
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dayKeys = Object.keys(d.days).sort();
+  sel.querySelector('option[value="ALL"]').textContent = `All days (${cov ? cov.gps_trips : ''} trips)`;
+  dayKeys.forEach(k => {
+    // only days that actually have GPS routes are present in d.days, so all are listed
+    const n = new Set(d.days[k].features.map(f => f.properties.trip).filter(Boolean)).size;
     const o = document.createElement('option');
     o.value = k;
-    o.textContent = `${k.slice(6)}‑${k.slice(4, 6)}‑${k.slice(0, 4)}`;
+    o.textContent = `${(+k.slice(6, 8))} ${MON[+k.slice(4, 6) - 1]} — ${n} trip${n === 1 ? '' : 's'}`;
     sel.append(o);
   });
   map = L.map('map', { scrollWheelZoom: true }).setView([51.52, -0.08], 11);
