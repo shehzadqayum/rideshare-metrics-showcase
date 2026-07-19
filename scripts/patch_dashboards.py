@@ -36,6 +36,10 @@ SHELL = """<!--SHELL-->
   /* Rows for trips with no GPS track must not advertise themselves as clickable. */
   tr.map-clickable.no-track{cursor:default}
   tr.map-clickable.no-track td:first-child{opacity:.55}
+  /* Full-screen map, matching the handwritten pages. */
+  .leaflet-container:fullscreen,.leaflet-container:-webkit-full-screen{width:100%!important;height:100%!important;border-radius:0}
+  .leaflet-container.rs-maxi{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2000!important;border-radius:0}
+  .rs-fs a{font-size:15px;line-height:26px;text-align:center;font-weight:600;cursor:pointer}
 </style>
 <script>
 // 406 of 762 trips have no GPS track, but every row is click-wired to
@@ -66,6 +70,60 @@ window.addEventListener('load', function () {
   }
   markRows();
   document.addEventListener('click', function () { setTimeout(markRows, 60); }, true);
+});
+
+// The dashboard map is built lazily when the panel is expanded, and this page
+// does not load site.js, so poll briefly for it and add the same wheel-zoom +
+// full-screen behaviour the handwritten maps get from mapExtras().
+window.addEventListener('load', function () {
+  var tries = 0;
+  var t = setInterval(function () {
+    if (++tries > 120) return clearInterval(t);
+    var map = window.weekMap;
+    if (!map || map.__extras) return;
+    clearInterval(t);
+    map.__extras = true;
+    map.scrollWheelZoom.enable();
+    var el = map.getContainer();
+    var native = el.requestFullscreen || el.webkitRequestFullscreen;
+    var nativeOn = function () { return (document.fullscreenElement || document.webkitFullscreenElement) === el; };
+    var maxiOn = function () { return el.classList.contains('rs-maxi'); };
+    var isFull = function () { return nativeOn() || maxiOn(); };
+    var label = function () {};
+    var resize = function () { setTimeout(function () { map.invalidateSize(); }, 60); };
+    var setMaxi = function (on) { el.classList.toggle('rs-maxi', on); label(); resize(); };
+    var Ctl = L.Control.extend({
+      options: { position: 'topleft' },
+      onAdd: function () {
+        var wrap = L.DomUtil.create('div', 'leaflet-bar leaflet-control rs-fs');
+        var a = L.DomUtil.create('a', '', wrap);
+        a.href = '#'; a.setAttribute('role', 'button');
+        label = function () {
+          a.title = isFull() ? 'Exit full screen' : 'View full screen';
+          a.setAttribute('aria-label', a.title);
+          a.textContent = isFull() ? '✕' : '⛶';
+        };
+        label();
+        L.DomEvent.on(a, 'click', function (e) {
+          L.DomEvent.stop(e);
+          if (isFull()) {
+            if (nativeOn()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+            else setMaxi(false);
+            return;
+          }
+          if (!native) return setMaxi(true);
+          var p = native.call(el);
+          if (p && p.catch) p.catch(function () { setMaxi(true); });
+        });
+        return wrap;
+      }
+    });
+    map.addControl(new Ctl());
+    var onChange = function () { label(); resize(); };
+    document.addEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && maxiOn()) setMaxi(false); });
+  }, 250);
 });
 </script>
 <!--/SHELL-->"""

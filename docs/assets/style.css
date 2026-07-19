@@ -74,6 +74,16 @@ footer.site { color:var(--muted); font-size:.74rem; margin-top:44px; border-top:
    they cannot paint over sticky bars as the page scrolls. */
 #map { height:560px; border-radius:10px; border:1px solid var(--border); position:relative; z-index:0; }
 
+/* A fullscreened map must fill the screen: Leaflet keeps the authored height
+   otherwise, leaving the map stranded in a black field. */
+.leaflet-container:fullscreen { width:100% !important; height:100% !important; border-radius:0; }
+.leaflet-container:-webkit-full-screen { width:100% !important; height:100% !important; border-radius:0; }
+/* Fallback when the Fullscreen API is refused: pin the map over the viewport.
+   Above the nav (1000) so nothing overlaps it. */
+.leaflet-container.rs-maxi { position:fixed !important; inset:0 !important;
+  width:100vw !important; height:100vh !important; z-index:2000 !important; border-radius:0; }
+.rs-fs a { font-size:15px; line-height:26px; text-align:center; font-weight:600; cursor:pointer; }
+
 /* Rows and map routes respond to click, so they must be reachable and visibly
    focusable without a mouse. */
 tr[tabindex], .wk, .day, .controls button, .tile, a { outline-offset:2px; }

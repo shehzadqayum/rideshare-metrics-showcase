@@ -100,3 +100,62 @@ function dataFail(file) {
     console.error('[showcase] data load failed:', file, err);
   };
 }
+
+/* Shared map behaviour, so every map on the site works the same way.
+   Called after Leaflet has loaded (site.js is deliberately loaded before it),
+   hence the late reference to the global L. */
+function mapExtras(map) {
+  map.scrollWheelZoom.enable();
+
+  const el = map.getContainer();
+  const native = el.requestFullscreen || el.webkitRequestFullscreen;
+
+  // Two ways to fill the screen. The native Fullscreen API is preferred, but it
+  // is refused without user activation and inside an iframe that lacks
+  // allowfullscreen, so fall back to pinning the map over the viewport — that
+  // always works, and the button must never be a no-op.
+  const nativeOn = () => (document.fullscreenElement || document.webkitFullscreenElement) === el;
+  const maxiOn = () => el.classList.contains('rs-maxi');
+  const isFull = () => nativeOn() || maxiOn();
+
+  const resize = () => setTimeout(() => map.invalidateSize(), 60);
+  const setMaxi = on => { el.classList.toggle('rs-maxi', on); label(); resize(); };
+
+  let label = () => {};
+  const Ctl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function () {
+      const wrap = L.DomUtil.create('div', 'leaflet-bar leaflet-control rs-fs');
+      const a = L.DomUtil.create('a', '', wrap);
+      a.href = '#';
+      a.setAttribute('role', 'button');
+      label = () => {
+        const on = isFull();
+        a.title = on ? 'Exit full screen' : 'View full screen';
+        a.setAttribute('aria-label', a.title);
+        a.textContent = on ? '✕' : '⛶';
+      };
+      label();
+      L.DomEvent.on(a, 'click', e => {
+        L.DomEvent.stop(e);
+        if (isFull()) {
+          if (nativeOn()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+          else setMaxi(false);
+          return;
+        }
+        if (!native) return setMaxi(true);
+        const p = native.call(el);
+        if (p && p.catch) p.catch(() => setMaxi(true));   // refused — pin instead
+      });
+      return wrap;
+    },
+  });
+  map.addControl(new Ctl());
+
+  const onChange = () => { label(); resize(); };
+  document.addEventListener('fullscreenchange', onChange);
+  document.addEventListener('webkitfullscreenchange', onChange);
+  // Escape exits the pinned mode; the native mode handles its own.
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && maxiOn()) setMaxi(false); });
+  return map;
+}

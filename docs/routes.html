@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=8">
+<link rel="stylesheet" href="assets/style.css?v=10">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -56,7 +56,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=8"></script>
+<script src="assets/site.js?v=10"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -169,7 +169,8 @@ getJSON('data/routes.json').then(d => {
   });
   // Matches week.html and demand.html: a full-width map that swallowed the
   // wheel would trap the page scroll. Ctrl/⌘+wheel and the +/- controls zoom.
-  map = L.map('map', { scrollWheelZoom: false }).setView([51.52, -0.08], 11);
+  map = L.map('map').setView([51.52, -0.08], 11);
+  mapExtras(map);   // wheel zoom + full-screen control, shared across every map
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
     { attribution: '© OpenStreetMap, © CARTO', maxZoom: 19 }).addTo(map);
   // click empty map to clear an isolated trip (ignore the click that did the isolating)
@@ -187,6 +188,6 @@ getJSON('data/routes.json').then(d => {
   render();
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=8"></script>
+<script src="assets/nav.js?v=10"></script>
 </body>
 </html>
