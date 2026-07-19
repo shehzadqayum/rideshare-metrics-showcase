@@ -125,42 +125,53 @@ function mapExtras(map) {
   const maxiOn = () => el.classList.contains('rs-maxi');
   const isFull = () => nativeOn() || maxiOn();
 
-  // Leaflet's invalidateSize keeps the top-left corner anchored, so growing the
-  // container to full screen drags the centre south-east — London ends up in
-  // France. Remember where the viewer was looking and restore it afterwards.
-  let pending = null;
-  const remember = () => { pending = { c: map.getCenter(), z: map.getZoom() }; };
+  // A resize must never move the geographic view — but the container's size
+  // can arrive in one step (pinned mode) or several (native full screen's
+  // animated transition, which also races Leaflet's own window-resize
+  // handler). Any scheme that compensates a single step, or restores a
+  // remembered view exactly once, shifts the view on the steps it misses —
+  // which is precisely how full screen kept relocating London to France.
+  // The only ordering-independent approach: track the intended view
+  // continuously, freeze tracking the moment a resize begins, and re-assert
+  // the view after every settlement.
+  let view = { c: map.getCenter(), z: map.getZoom() };
+  let frozen = false;
+  map.on('moveend zoomend', () => {
+    if (!frozen) view = { c: map.getCenter(), z: map.getZoom() };
+  });
 
-  // Native full screen is an animated transition, so the final size arrives
-  // later than any fixed timeout would guess. Syncing too early leaves Leaflet
-  // holding a stale size: hit-testing and fitBounds then work off the wrong
-  // dimensions and clicks fling the view hundreds of miles. Watch the container
-  // instead and re-sync whenever its size actually settles.
   let settleTimer = null;
   const settle = () => {
+    frozen = true;                    // resize in flight: stop trusting moveend
     clearTimeout(settleTimer);
     settleTimer = setTimeout(() => {
       map.invalidateSize({ pan: false, animate: false });
-      if (pending) { map.setView(pending.c, pending.z, { animate: false }); pending = null; }
-    }, 150);
+      map.setView(view.c, view.z, { animate: false });
+      frozen = false;
+    }, 120);
   };
   const RO = window.ResizeObserver;
+  // ResizeObserver fires per size step, after layout and before user events,
+  // so `frozen` is set before any interaction can record a shifted view.
   if (RO) new RO(settle).observe(el);
 
-  // Belt and braces. Every symptom of a stale size shows up on interaction —
-  // the click resolves against the wrong dimensions, so hit-testing misses and
-  // any fitBounds reframes onto the wrong place. Re-sync on the spot if the
-  // cached size has drifted from the real box, before Leaflet uses it.
-  const ensureSize = () => {
+  // Belt and braces for a click landing mid-transition, before the settle:
+  // re-sync and re-assert in the same breath. invalidateSize fires moveend
+  // synchronously, so freeze the recorder for the duration or it captures the
+  // shifted centre as the intended view before the restore runs.
+  map.on('mousedown', () => {
     const r = el.getBoundingClientRect();
     if (Math.abs(map.getSize().x - r.width) > 2 || Math.abs(map.getSize().y - r.height) > 2) {
+      const v = view;
+      frozen = true;
       map.invalidateSize({ pan: false, animate: false });
+      map.setView(v.c, v.z, { animate: false });
+      frozen = false;
     }
-  };
-  map.on('mousedown', ensureSize);
+  });
+
   // Without ResizeObserver, re-check across the span a transition might take.
-  const settleRepeatedly = () => [0, 150, 400, 800].forEach(ms => setTimeout(settle, ms));
-  const onTransition = RO ? settle : settleRepeatedly;
+  const onTransition = RO ? settle : () => [0, 150, 400, 800].forEach(ms => setTimeout(settle, ms));
   const setMaxi = on => { el.classList.toggle('rs-maxi', on); label(); onTransition(); };
 
   let label = () => {};
@@ -180,7 +191,6 @@ function mapExtras(map) {
       label();
       L.DomEvent.on(a, 'click', e => {
         L.DomEvent.stop(e);
-        remember();                       // hold the view across the resize
         if (isFull()) {
           if (nativeOn()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
           else setMaxi(false);

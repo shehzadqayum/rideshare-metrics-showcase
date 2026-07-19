@@ -96,29 +96,39 @@ window.addEventListener('load', function () {
     var maxiOn = function () { return el.classList.contains('rs-maxi'); };
     var isFull = function () { return nativeOn() || maxiOn(); };
     var label = function () {};
-    // invalidateSize anchors the top-left, so growing to full screen drags the
-    // centre away; hold the viewer's position across the resize.
-    var pending = null;
-    var remember = function () { pending = { c: map.getCenter(), z: map.getZoom() }; };
-    // Native full screen animates, so a fixed timeout syncs too early and leaves
-    // Leaflet holding a stale size - clicks then fling the view. Watch the
-    // container and re-sync when its size actually settles.
+    // A resize must never move the geographic view, but the size can arrive in
+    // one step (pinned mode) or several (native full screen animates). Anything
+    // that compensates one step, or restores a remembered view exactly once,
+    // shifts the view on the steps it misses. Track the intended view
+    // continuously, freeze tracking while a resize is in flight, and re-assert
+    // the view after every settlement.
+    var view = { c: map.getCenter(), z: map.getZoom() };
+    var frozen = false;
+    map.on('moveend zoomend', function () {
+      if (!frozen) view = { c: map.getCenter(), z: map.getZoom() };
+    });
     var settleTimer = null;
     var settle = function () {
+      frozen = true;
       clearTimeout(settleTimer);
       settleTimer = setTimeout(function () {
         map.invalidateSize({ pan: false, animate: false });
-        if (pending) { map.setView(pending.c, pending.z, { animate: false }); pending = null; }
-      }, 150);
+        map.setView(view.c, view.z, { animate: false });
+        frozen = false;
+      }, 120);
     };
     var RO = window.ResizeObserver;
     if (RO) new RO(settle).observe(el);
-    // Belt and braces: a stale size only bites on interaction, so re-sync on
-    // the spot if the cached size has drifted before Leaflet uses it.
+    // A click landing mid-transition re-syncs and re-asserts in the same
+    // breath - never one without the other.
     map.on('mousedown', function () {
       var r = el.getBoundingClientRect();
       if (Math.abs(map.getSize().x - r.width) > 2 || Math.abs(map.getSize().y - r.height) > 2) {
+        var v = view;         // invalidateSize fires moveend synchronously
+        frozen = true;
         map.invalidateSize({ pan: false, animate: false });
+        map.setView(v.c, v.z, { animate: false });
+        frozen = false;
       }
     });
     var onTransition = RO ? settle : function () {
@@ -139,7 +149,6 @@ window.addEventListener('load', function () {
         label();
         L.DomEvent.on(a, 'click', function (e) {
           L.DomEvent.stop(e);
-          remember();
           if (isFull()) {
             if (nativeOn()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
             else setMaxi(false);
