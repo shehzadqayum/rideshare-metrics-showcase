@@ -142,6 +142,9 @@ function mapExtras(map) {
   const nativeOn = () => (document.fullscreenElement || document.webkitFullscreenElement) === el;
   const maxiOn = () => el.classList.contains('rs-maxi');
   const isFull = () => nativeOn() || maxiOn();
+  // Announced so page controls can move into the map for the duration (see
+  // mapOverlay). Both routes into full screen have to fire it.
+  const fireFull = () => map.fire('rs:full', { full: isFull() });
 
   // --- resize handling -------------------------------------------------------
   // Two invariants, learned the hard way:
@@ -206,7 +209,14 @@ function mapExtras(map) {
 
   // Without ResizeObserver, re-check across the span a transition might take.
   const onTransition = RO ? settle : () => [0, 150, 400, 800].forEach(ms => setTimeout(settle, ms));
-  const setMaxi = on => { el.classList.toggle('rs-maxi', on); label(); onTransition(); };
+  // The pinned map covers the viewport but the page behind it still scrolls, so
+  // its scrollbars sit on top of the map - the horizontal one covered the
+  // bottom of the player bar. Nothing behind a maximised map should scroll.
+  const setMaxi = on => {
+    el.classList.toggle('rs-maxi', on);
+    document.body.classList.toggle('rs-maxi-lock', on);
+    label(); fireFull(); onTransition();
+  };
 
   let label = () => {};
   const Ctl = L.Control.extend({
@@ -239,10 +249,77 @@ function mapExtras(map) {
   });
   map.addControl(new Ctl());
 
-  const onChange = () => { label(); onTransition(); };
+  const onChange = () => { label(); fireFull(); onTransition(); };
   document.addEventListener('fullscreenchange', onChange);
   document.addEventListener('webkitfullscreenchange', onChange);
   // Escape exits the pinned mode; the native mode handles its own.
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && maxiOn()) setMaxi(false); });
   return map;
+}
+
+/* Controls authored outside the map are unusable in full screen: the native
+   Fullscreen API renders nothing but the map element, and even the pinned
+   fallback covers the page (hit-testing confirmed every control returning the
+   map itself). That left the playback bar, legend and stats unreachable in the
+   one mode where you most want to watch a shift replay.
+
+   The fix is to relocate the REAL control nodes into hosts that sit inside the
+   map container, and put them back on exit. Because the same nodes move, every
+   event handler and every update path (pbEls.read, the seek sync, the legend
+   rebuild) keeps working with nothing rewired.
+
+   spec.bottom -> player bar across the foot; spec.tr -> panel at top right,
+   collapsible where the screen is small. Nodes are adopted in the order given. */
+function mapOverlay(map, spec) {
+  const el = map.getContainer();
+  const hosts = {}, home = new Map();
+  ['bottom', 'tr'].forEach(k => {
+    const nodes = (spec[k] || []).filter(Boolean);
+    if (!nodes.length) return;
+    const h = L.DomUtil.create('div', 'rs-ov rs-ov-' + k, el);
+    let body = h;
+    if (k === 'tr') {                      // collapsible header for small screens
+      const tog = L.DomUtil.create('button', 'rs-ov-tog', h);
+      tog.type = 'button';
+      tog.textContent = '⚙ Layers & legend';
+      tog.setAttribute('aria-expanded', 'false');
+      body = L.DomUtil.create('div', 'rs-ov-body', h);
+      L.DomEvent.on(tog, 'click', () => {
+        const on = !h.classList.contains('open');
+        h.classList.toggle('open', on);
+        tog.setAttribute('aria-expanded', String(on));
+      });
+    }
+    // Without this, dragging the scrubber pans the map underneath and a click
+    // on any button also registers as a map click (which clears the isolation).
+    L.DomEvent.disableClickPropagation(h);
+    L.DomEvent.disableScrollPropagation(h);
+    hosts[k] = { body, nodes };
+  });
+
+  // Leaflet puts the tile attribution bottom-right, exactly where the player
+  // bar goes. The licences have to stay legible, so lift that corner clear.
+  const lift = () => el.style.setProperty('--rsov-b',
+    (hosts.bottom ? hosts.bottom.body.offsetHeight : 0) + 'px');
+
+  function adopt(on) {
+    if (on === el.classList.contains('rs-ov-on')) return;
+    if (on) {
+      Object.values(hosts).forEach(h => h.nodes.forEach(n => {
+        const mark = document.createComment('rs-ov');   // the exact spot to restore to
+        n.parentNode.insertBefore(mark, n);
+        home.set(n, mark);
+        h.body.append(n);
+      }));
+    } else {
+      home.forEach((mark, n) => { mark.parentNode.insertBefore(n, mark); mark.remove(); });
+      home.clear();
+    }
+    el.classList.toggle('rs-ov-on', on);
+    requestAnimationFrame(lift);
+  }
+
+  map.on('rs:full', e => adopt(e.full));
+  if (window.ResizeObserver && hosts.bottom) new ResizeObserver(lift).observe(hosts.bottom.body);
+  return { adopt };
 }

@@ -103,6 +103,13 @@ footer.site { color:var(--muted); font-size:.74rem; margin-top:44px; border-top:
   border:1px solid var(--border); border-radius:8px; padding:6px 10px; cursor:pointer; }
 .controls button.on { border-color:var(--s1); color:var(--s1); font-weight:600; }
 .controls button:disabled { opacity:.4; cursor:not-allowed; }
+/* The colour-by group is wrapped so it can be moved into the map in full
+   screen, so it carries its own styling rather than inheriting .controls'. */
+.modebtns { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.modebtns button { font:inherit; background:var(--surface); color:var(--ink);
+  border:1px solid var(--border); border-radius:8px; padding:6px 10px; cursor:pointer; }
+.modebtns button.on { border-color:var(--s1); color:var(--s1); font-weight:600; }
+.modebtns button:disabled { opacity:.4; cursor:not-allowed; }
 /* z-index:0 traps Leaflet's panes (400) and controls (1000) inside the map so
    they cannot paint over sticky bars as the page scrolls. */
 #map { height:560px; border-radius:10px; border:1px solid var(--border); position:relative; z-index:0; }
@@ -115,7 +122,57 @@ footer.site { color:var(--muted); font-size:.74rem; margin-top:44px; border-top:
    Above the nav (1000) so nothing overlaps it. */
 .leaflet-container.rs-maxi { position:fixed !important; inset:0 !important;
   width:100vw !important; height:100vh !important; z-index:2000 !important; border-radius:0; }
+body.rs-maxi-lock { overflow:hidden; }
 .rs-fs a { font-size:15px; line-height:26px; text-align:center; font-weight:600; cursor:pointer; }
+
+/* ---- full-screen control overlay (mapOverlay in assets/site.js) ----
+   Hosts that live INSIDE the map container, so they go full screen with it.
+   They stay empty and hidden until the map is maximised, at which point the
+   real control nodes are moved in. Translucent over the tiles, and themed from
+   the same variables as the page so the adopted controls stay readable in both
+   light and dark; the flat --surface first line covers browsers without
+   color-mix. */
+.rs-ov { position:absolute; z-index:1100; display:none;
+  background:var(--surface);
+  background:color-mix(in srgb, var(--surface) 86%, transparent);
+  -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+  border:1px solid var(--border); box-shadow:0 2px 20px rgba(0,0,0,.30); }
+.rs-ov-on .rs-ov { display:block; }
+.rs-ov-bottom { left:0; right:0; bottom:0; padding:10px 14px; border-width:1px 0 0; }
+.rs-ov-tr { top:12px; right:12px; width:min(42vw,330px); padding:9px 12px; border-radius:10px;
+  max-height:calc(100% - 90px); overflow:auto; }
+.rs-ov-on .leaflet-bottom { margin-bottom:var(--rsov-b,0); }
+.rs-ov .pbar, .rs-ov .legend, .rs-ov .modebtns { margin:0; }
+.rs-ov .pbnote { display:none; }          /* the standing explanation belongs on the page */
+.rs-ov .legend { margin-top:9px; gap:11px; }
+.rs-ov #stats { display:block; margin-top:9px; font-size:.75rem; line-height:1.5; }
+.rs-ov-tog { display:none; font:inherit; font-size:.78rem; font-weight:600; width:100%;
+  background:none; border:0; color:var(--ink); padding:3px 0; cursor:pointer; text-align:left; }
+/* The day stepper exists only for full screen: a native <select> popup inside a
+   fullscreen element is inconsistent across browsers, and prev/next is a far
+   better touch target than a dropdown. */
+.ovonly { display:none; }
+.rs-ov .ovonly { display:flex; align-items:center; gap:5px; margin-bottom:9px; }
+.rs-ov .ovonly button { font:inherit; background:var(--surface); color:var(--ink);
+  border:1px solid var(--border); border-radius:8px; padding:5px 11px; cursor:pointer; }
+.rs-ov .ovonly button:disabled { opacity:.35; cursor:not-allowed; }
+.rs-ov .ovonly b { flex:1; font-size:.78rem; text-align:center; }
+@media (max-width:760px), (max-height:540px) {
+  .rs-ov-tr { width:min(66vw,250px); top:10px; right:10px; }
+  .rs-ov-tog { display:block; }
+  .rs-ov-tr .rs-ov-body { display:none; }
+  .rs-ov-tr.open .rs-ov-body { display:block; margin-top:7px; }
+  .rs-ov-bottom { padding:8px 10px; }
+  .rs-ov #stats { display:none; }         /* the bar's live readout says more, in less room */
+  .rs-ov .pbar { gap:7px; }
+  .rs-ov .pbar .pbtn { min-width:0; flex:0 0 auto; }
+  /* comfortable touch targets, and the readout on its own line so the scrubber
+     keeps a usable width on a phone */
+  .rs-ov .pbar .pbtn, .rs-ov .pbar .spd button { min-height:44px; }
+  .rs-ov .ovonly button, .rs-ov-tog { min-height:44px; }
+  .rs-ov .ovonly button { min-width:44px; }
+  .rs-ov .pbar .rd { flex-basis:100%; font-size:.76rem; }
+}
 
 /* Rows and map routes respond to click, so they must be reachable and visibly
    focusable without a mouse. */

@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=29">
+<link rel="stylesheet" href="assets/style.css?v=30">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -32,11 +32,13 @@
     <label>Day:
       <select id="daySel"><option value="ALL">All days</option></select>
     </label>
-    <span style="color:var(--muted)">Colour by:</span>
-    <button data-mode="seg" class="on">Segment type</button>
-    <button data-mode="ppm">£ per mile</button>
-    <button data-mode="service">Service</button>
-    <button data-mode="speed">Speed</button>
+    <span class="modebtns" id="modeBtns">
+      <span style="color:var(--muted)">Colour by:</span>
+      <button data-mode="seg" class="on">Segment type</button>
+      <button data-mode="ppm">£ per mile</button>
+      <button data-mode="service">Service</button>
+      <button data-mode="speed">Speed</button>
+    </span>
     <span id="stats" style="color:var(--muted)"></span>
   </div>
   <div class="legend" id="legend"></div>
@@ -66,13 +68,16 @@
       shift retrace itself at the real recorded speed: the car crawls in traffic and flies on the motorway, a
       live speedometer and the true time-of-day clock run alongside the trip count and earnings, and the idle
       waits between jobs are skipped.</li>
+      <li><b>Full screen</b> — the ⛶ button top-left fills the screen, and the player, legend and colour
+      controls come with it: the play bar sits across the foot and the layers panel top-right, with a
+      day stepper in place of the dropdown. On a phone the layers panel collapses behind a single button.</li>
     </ul>
   </div>
 
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=29"></script>
+<script src="assets/site.js?v=30"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -332,7 +337,7 @@ function pbTeardown(restore) {
 function pbReset() { pb.trail.clearLayers(); pb.drawn = 0; pb.segDrawn = 0; pb.li = 0; pb.lt = 0; pb.spd = 0; pb.done = false; pb.idleUntil = 0; }
 function setColourMode(m) {      // set mode + button state + legend, without re-rendering
   mode = m;
-  document.querySelectorAll('.controls button[data-mode]').forEach(x => x.classList.toggle('on', x.dataset.mode === m));
+  document.querySelectorAll('#modeBtns button').forEach(x => x.classList.toggle('on', x.dataset.mode === m));
   legend();
 }
 function pbPlay() {
@@ -491,10 +496,41 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   pbEls.seek = document.getElementById('pbSeek');
   pbEls.read = document.getElementById('pbRead');
 
+  // ---- full-screen overlay ----
+  // In full screen the page behind the map is not rendered at all, so the
+  // controls have to come with it. A day stepper stands in for the <select>
+  // (see .ovonly in style.css); everything else is the real node, moved.
+  const step = document.createElement('span');
+  step.id = 'dayStep';
+  step.className = 'ovonly';
+  step.innerHTML = '<button type="button" aria-label="Previous day">&lsaquo;</button>' +
+                   '<b></b><button type="button" aria-label="Next day">&rsaquo;</button>';
+  const stepLbl = step.querySelector('b'), stepBtn = step.querySelectorAll('button');
+  const stepGo = d => {
+    const i = Math.max(1, Math.min(sel.options.length - 1, sel.selectedIndex + d));   // 0 is "All days"
+    if (i === sel.selectedIndex) return;
+    sel.selectedIndex = i;
+    sel.dispatchEvent(new Event('change'));
+  };
+  stepBtn[0].addEventListener('click', () => stepGo(-1));
+  stepBtn[1].addEventListener('click', () => stepGo(1));
+  function syncStep() {
+    stepLbl.textContent = sel.value === 'ALL' ? 'All days'
+      : sel.options[sel.selectedIndex].textContent.split(' — ')[0];
+    stepBtn[0].disabled = sel.selectedIndex <= 1;
+    stepBtn[1].disabled = sel.selectedIndex >= sel.options.length - 1;
+  }
+  document.querySelector('.controls').append(step);
+  mapOverlay(map, {
+    bottom: [pbar],
+    tr: [step, document.getElementById('modeBtns'), document.getElementById('legend'),
+         document.getElementById('stats')],
+  });
+
   // Speed colouring is per-segment; across all 31 days that is ~27k segments,
   // so it is offered for a single day only.
   function syncSpeedBtn() {
-    const b = document.querySelector('.controls button[data-mode="speed"]');
+    const b = document.querySelector('#modeBtns button[data-mode="speed"]');
     const isAll = sel.value === 'ALL';
     b.disabled = isAll;
     b.title = isAll ? 'Pick a single day to colour by speed' : 'Colour each segment by the speed actually driven';
@@ -505,15 +541,14 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
     pbTeardown(false);
     pbEls.seek.value = 0;
     syncSpeedBtn();
+    syncStep();
     pbBtnLabel();
     render(true);
   });
-  document.querySelectorAll('.controls button').forEach(b =>
+  document.querySelectorAll('#modeBtns button').forEach(b =>
     b.addEventListener('click', () => {
-      document.querySelectorAll('.controls button').forEach(x => x.classList.remove('on'));
-      b.classList.add('on');
-      mode = b.dataset.mode;
-      if (pb) { pbRestyle(); legend(); } else render(false);
+      setColourMode(b.dataset.mode);
+      if (pb) pbRestyle(); else render(false);
     }));
 
   // ---- playback controls ----
@@ -538,10 +573,11 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
 
   pbar.classList.add('on');   // the play bar is always visible; Play picks a day when on "All days"
   syncSpeedBtn();
+  syncStep();
   pbBtnLabel();
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=29"></script>
+<script src="assets/nav.js?v=30"></script>
 </body>
 </html>
