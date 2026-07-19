@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=26">
+<link rel="stylesheet" href="assets/style.css?v=27">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -46,8 +46,8 @@
       <button data-s="1" class="on" type="button">1×</button><button data-s="2" type="button">2×</button><button data-s="4" type="button">4×</button>
     </span>
     <span class="rd" id="pbRead"></span>
-    <span class="pbnote">Playback is reconstructed and time-compressed — the routes and the order they run in are real GPS;
-      the pacing is illustrative, not the actual clock (per-point timestamps aren't kept).</span>
+    <span class="pbnote">Played at the speed actually recorded by the GPS — traffic, stops and motorway are all real, and
+      the clock shows the true time of day. Idle waits between jobs are skipped, and the whole shift is compressed.</span>
   </div>
   <div id="map"></div>
 
@@ -60,16 +60,17 @@
       <li><b>£ per mile</b> — short central London hops often out-earn long motorway runs per mile;
       the gradient makes the good and bad corridors obvious.</li>
       <li><b>Coverage</b> — spanning inner and outer London, airports to suburbs, day and night shifts.</li>
-      <li><b>Play a day</b> — press <b>▶ Play a day</b> below the map (or pick a specific day first) to watch
-      that shift retrace itself: a marker leads while the routes build up in order, with a running trip count,
-      earnings and miles. The order is real; the pacing is illustrative.</li>
+      <li><b>Play a day</b> — press <b>▶ Play a day</b> below the map (or pick a specific day first) to watch a
+      shift retrace itself at the real recorded speed: the car crawls in traffic and flies on the motorway, a
+      live speedometer and the true time-of-day clock run alongside the trip count and earnings, and the idle
+      waits between jobs are skipped.</li>
     </ul>
   </div>
 
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=26"></script>
+<script src="assets/site.js?v=27"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -108,20 +109,27 @@ function legend() {
      <span><span class="sw" style="background:#8a8a85"></span>en-route/unknown</span>`;
 }
 
-// ---- day playback: a "ghost car" retraces the shift while routes build up ----
-// The trip ids encode per-day order (20260209_001, _003…), so ordering is real;
-// only the pacing is synthetic (GPS per-point times weren't kept). No wall clock
-// is claimed — the readout counts trips and accumulates earnings and miles.
-let pb = null;               // active playback state, or null
-const PB_DUR = 30000;        // a whole day plays in ~30s at 1x, whatever its size
+// ---- day playback: a ghost car retraces the shift at real recorded speed ----
+// Every GPS point carries its real time (properties.t = seconds from the
+// segment start; s0 = start, seconds since midnight), so the marker moves at
+// the speed actually driven — crawl in traffic, fast on the motorway, stops at
+// lights. Idle waits between jobs are skipped with a "waited N min" flash
+// (hybrid). The order and the speed are real; only the overall length is
+// compressed, and the clock shows the true time of day.
+let pb = null;
+const PB_PLAY_SEC = 35;     // a day's *driving* compresses to ~35s at 1x
+const IDLE_SKIP = 60;       // gaps longer than this (real seconds) are skipped
 const pbEls = {};
 
-function hav(a, b) {         // metres between [lat,lng] pairs
+function hav(a, b) {        // metres between [lat,lng]
   const R = 6371000, r = Math.PI / 180;
   const dLa = (b[0] - a[0]) * r, dLo = (b[1] - a[1]) * r;
   const s = Math.sin(dLa / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLo / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(s));
 }
+const hmiles = (a, b) => hav(a, b) / 1609.34;
+const hhmm = sec => { sec = ((sec % 86400) + 86400) % 86400; const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); };
+
 function dayLegs(dayKey) {
   const byTrip = {};
   (DATA.days[dayKey].features || []).forEach(f => {
@@ -133,97 +141,130 @@ function dayLegs(dayKey) {
       const f = byTrip[id][seg];
       if (!f) return;
       const pts = f.geometry.coordinates.map(c => [c[1], c[0]]);   // [lon,lat]->[lat,lng]
-      if (pts.length < 2) return;
-      const cum = [0]; let d = 0;
-      for (let i = 1; i < pts.length; i++) { d += hav(pts[i - 1], pts[i]); cum.push(d); }
-      legs.push({ id, seg, props: f.properties, pts, cum, dist: d });
+      const t = f.properties.t || [];
+      if (pts.length < 2 || t.length !== pts.length) return;
+      legs.push({ id, seg, props: f.properties, pts, t, s0: f.properties.s0 || 0, dur: Math.max(1, t[t.length - 1] - t[0]) });
     });
   });
-  let off = 0;
-  legs.forEach(l => { l.start = off; off += l.dist; });
-  return { legs, total: off };
+  // absolute (midnight-unwrapped) start, idle gaps, cumulative duration + day totals
+  let off = 0, prev = -1, driveSec = 0, distMi = 0;
+  legs.forEach((l, i) => {
+    if (prev >= 0 && l.s0 < prev - 3600) off += 86400;   // crossed midnight
+    l.abs = l.s0 + off; prev = l.s0;
+    l.cumDur = driveSec; driveSec += l.dur;
+    for (let k = 1; k < l.pts.length; k++) distMi += hmiles(l.pts[k - 1], l.pts[k]);
+    l.gap = i > 0 ? Math.max(0, l.abs - (legs[i - 1].abs + legs[i - 1].dur)) : 0;
+    if (l.gap <= IDLE_SKIP) l.gap = 0;
+  });
+  return { legs, driveSec, distMi };
 }
 function pbStyle(leg) {
   const s = styleFor(leg.props);
   return { color: s.color, weight: leg.seg === 'trip' ? 4 : 2.5,
     opacity: leg.seg === 'trip' ? .95 : .6, dashArray: leg.seg === 'enroute' ? '5,6' : null };
 }
-function pbPos(D) {
-  const legs = pb.legs;
-  let idx = legs.length - 1;
-  for (let i = 0; i < legs.length; i++) {
-    if (D < legs[i].start + legs[i].dist) { idx = i; break; }
-  }
-  const leg = legs[idx], local = Math.max(0, Math.min(leg.dist, D - leg.start));
+function pbPosInLeg(leg, lt) {   // interpolate [lat,lng] at lt seconds into the leg
+  const t = leg.t, base = t[0], local = Math.max(0, Math.min(leg.dur, lt));
   let j = 0;
-  while (j < leg.cum.length - 2 && leg.cum[j + 1] < local) j++;
-  const segLen = leg.cum[j + 1] - leg.cum[j] || 1, t = (local - leg.cum[j]) / segLen;
+  while (j < t.length - 2 && (t[j + 1] - base) < local) j++;
+  const span = (t[j + 1] - t[j]) || 1, f = Math.max(0, Math.min(1, (local - (t[j] - base)) / span));
   const a = leg.pts[j], b = leg.pts[j + 1];
-  return { latlng: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], idx, ptIdx: j };
+  return { latlng: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], j, span, a, b };
 }
-function pbAdvanceTrail(pos) {
-  while (pb.drawn < pos.idx) {                         // finalise legs fully behind us
-    const leg = pb.legs[pb.drawn];
-    L.polyline(leg.pts, pbStyle(leg)).addTo(pb.trail);
+function pbProgress() { return pb ? (pb.legs[pb.li].cumDur + pb.lt) / pb.driveSec : 0; }
+function pbFrameRender() {
+  const leg = pb.legs[pb.li], pos = pbPosInLeg(leg, pb.lt);
+  while (pb.drawn < pb.li) {                              // finalise completed legs
+    const L2 = pb.legs[pb.drawn]; L.polyline(L2.pts, pbStyle(L2)).addTo(pb.trail);
     pb.drawn++; pb.partial = null;
   }
-  const leg = pb.legs[pos.idx];
-  const upto = leg.pts.slice(0, pos.ptIdx + 1).concat([pos.latlng]);
+  const upto = leg.pts.slice(0, pos.j + 1).concat([pos.latlng]);
   if (!pb.partial) pb.partial = L.polyline(upto, pbStyle(leg)).addTo(pb.trail);
   else pb.partial.setLatLngs(upto);
-}
-function pbRender(D) {
-  const pos = pbPos(D);
-  pbAdvanceTrail(pos);
-  const col = pbStyle(pb.legs[pos.idx]).color;
+  const col = pbStyle(leg).color;
   pb.marker.setLatLng(pos.latlng); pb.marker.setStyle({ fillColor: col });
   pb.halo.setLatLng(pos.latlng); pb.halo.setStyle({ fillColor: col });
-  let done = 0, gbp = 0, mi = 0;
-  pb.legs.forEach(l => {
-    if (l.seg === 'trip' && l.start + l.dist <= D + 1) { done++; gbp += l.props.gbp || 0; mi += l.props.mi || 0; }
-  });
+  // instantaneous speed, clamped for GPS glitches and smoothed
+  const inst = Math.min(85, hmiles(pos.a, pos.b) / (pos.span / 3600));
+  pb.spd = pb.spd * 0.72 + inst * 0.28;
+  pbReadout(leg);
+  if (!pb.scrubbing) pbEls.seek.value = Math.round(pbProgress() * 1000);
+}
+function pbReadout(leg) {
+  let done = 0, gbp = 0;
+  for (let i = 0; i < pb.li; i++) if (pb.legs[i].seg === 'trip') { done++; gbp += pb.legs[i].props.gbp || 0; }
   const n = pb.legs.filter(l => l.seg === 'trip').length;
-  pbEls.read.innerHTML = `Trip <b>${Math.min(done + (pb.done ? 0 : 1), n)}/${n}</b> · £${gbp.toFixed(2)} · ${mi.toFixed(1)} mi`;
-  if (!pb.scrubbing) pbEls.seek.value = Math.round(D / pb.total * 1000);
+  pbEls.read.innerHTML = `<b>${hhmm(leg.abs + pb.lt)}</b> · <b>${Math.round(pb.spd)}</b> mph · Trip ${Math.min(done + 1, n)}/${n} · £${gbp.toFixed(2)}`;
+}
+function pbDayIdle(dayKey) {   // idle readout: real driving time + average speed for the day
+  const { driveSec, distMi, legs } = dayLegs(dayKey);
+  const n = legs.filter(l => l.seg === 'trip').length;
+  pbEls.read.innerHTML = `<span style="color:var(--muted)">${n} trips · ${(driveSec / 3600).toFixed(1)} h driving · ` +
+    `${distMi.toFixed(0)} mi · avg <b style="color:var(--ink2)">${Math.round(distMi / (driveSec / 3600))}</b> mph — press play</span>`;
 }
 function pbBtnLabel() {
   const day = document.getElementById('daySel').value;
   pbEls.btn.textContent = pb && pb.playing ? '⏸ Pause'
     : pb && pb.done ? '↻ Replay'
     : (day === 'ALL' ? '▶ Play a day' : '▶ Play day');
-  if (!pb) pbEls.read.innerHTML = '<span style="color:var(--muted)">watch a shift retrace itself — routes build up in order</span>';
+  if (!pb) {
+    if (day === 'ALL') pbEls.read.innerHTML = '<span style="color:var(--muted)">watch a shift retrace itself at real recorded speed</span>';
+    else pbDayIdle(day);
+  }
 }
 function pbPickDay() {         // the richest day makes the best showcase
   let best = null, bn = -1;
   Object.keys(DATA.days).forEach(k => {
-    const n = new Set(DATA.days[k].features.map(f => f.properties.trip)).size;
-    if (n > bn) { bn = n; best = k; }
+    const c = new Set(DATA.days[k].features.map(f => f.properties.trip)).size;
+    if (c > bn) { bn = c; best = k; }
   });
   return best;
 }
+function pbFlashIdle(gapSec) {
+  pbEls.read.innerHTML = `<span style="color:var(--warn)">⏭ waited ${Math.round(gapSec / 60)} min for the next job</span>`;
+}
 function pbTick(ts) {
   if (!pb || !pb.playing) return;
+  if (pb.idleUntil) {                        // holding on an idle-skip flash
+    if (ts < pb.idleUntil) { pb.raf = requestAnimationFrame(pbTick); return; }
+    pb.idleUntil = 0; pb.last = ts;
+  }
   if (pb.last == null) pb.last = ts;
-  const dt = Math.min(80, ts - pb.last); pb.last = ts;
-  pb.D += (pb.total / PB_DUR) * dt * pb.speed;
-  if (pb.D >= pb.total) { pb.D = pb.total; pb.playing = false; pb.done = true; }
-  pbRender(pb.D);
+  const dtms = Math.min(80, ts - pb.last); pb.last = ts;
+  pb.lt += (dtms / 1000) * pb.rate * pb.mult;
+  while (pb.li < pb.legs.length && pb.lt >= pb.legs[pb.li].dur) {   // crossed one or more leg ends
+    const fin = pb.legs[pb.li];
+    while (pb.drawn <= pb.li) { const L2 = pb.legs[pb.drawn]; L.polyline(L2.pts, pbStyle(L2)).addTo(pb.trail); pb.drawn++; }
+    pb.partial = null;
+    pb.lt -= fin.dur; pb.li++;
+    if (pb.li >= pb.legs.length) {            // end of the day
+      pb.li = pb.legs.length - 1; pb.lt = pb.legs[pb.li].dur; pb.playing = false; pb.done = true;
+      pbFrameRender(); pbBtnLabel(); return;
+    }
+    if (pb.legs[pb.li].gap > 0) {             // hybrid: skip the wait, flash it, jump the car
+      pb.idleUntil = ts + 1200; pb.last = null;
+      pb.marker.setLatLng(pb.legs[pb.li].pts[0]); pb.halo.setLatLng(pb.legs[pb.li].pts[0]);
+      pbFlashIdle(pb.legs[pb.li].gap); pb.raf = requestAnimationFrame(pbTick); return;
+    }
+  }
+  pbFrameRender();
   if (pb.playing) pb.raf = requestAnimationFrame(pbTick);
-  else pbBtnLabel();
 }
 function pbInit(dayKey) {
   pbTeardown(false);
-  const { legs, total } = dayLegs(dayKey);
-  if (!legs.length || total < 1) return false;
-  if (layer) { layer.remove(); layer = null; }        // hide the interactive static day
-  pb = { day: dayKey, legs, total, D: 0, speed: 1, playing: false, done: false, drawn: 0, partial: null, last: null };
+  const { legs, driveSec, distMi } = dayLegs(dayKey);
+  if (!legs.length || driveSec < 1) return false;
+  if (layer) { layer.remove(); layer = null; }
+  pb = { day: dayKey, legs, driveSec, distMi, li: 0, lt: 0, mult: 1, spd: 0,
+         playing: false, done: false, drawn: 0, partial: null, last: null, idleUntil: 0,
+         rate: driveSec / PB_PLAY_SEC };
   pb.ghost = L.geoJSON(DATA.days[dayKey], { style: { color: '#94a3b8', weight: 1.5, opacity: .18 }, interactive: false }).addTo(map);
   pb.trail = L.layerGroup().addTo(map);
-  const c0 = pbStyle(legs[0]).color, p0 = pbPos(0).latlng;
+  const c0 = pbStyle(legs[0]).color, p0 = legs[0].pts[0];
   pb.halo = L.circleMarker(p0, { radius: 13, stroke: false, fillColor: c0, fillOpacity: .22, interactive: false }).addTo(map);
   pb.marker = L.circleMarker(p0, { radius: 8, color: '#fff', weight: 3, fillColor: c0, fillOpacity: 1 }).addTo(map);
   try { map.fitBounds(pb.ghost.getBounds(), { padding: [30, 30], maxZoom: 14 }); } catch (e) {}
-  pbRender(0); pbBtnLabel();
+  pbFrameRender(); pbBtnLabel();
   return true;
 }
 function pbTeardown(restore) {
@@ -234,9 +275,10 @@ function pbTeardown(restore) {
   }
   if (restore) render(false);
 }
+function pbReset() { pb.trail.clearLayers(); pb.drawn = 0; pb.partial = null; pb.li = 0; pb.lt = 0; pb.spd = 0; pb.done = false; pb.idleUntil = 0; }
 function pbPlay() {
   if (!pb) { if (!pbInit(document.getElementById('daySel').value)) return; }
-  if (pb.done) { pb.trail.clearLayers(); pb.drawn = 0; pb.partial = null; pb.D = 0; pb.done = false; }
+  if (pb.done) pbReset();
   pb.playing = true; pb.last = null; pbBtnLabel();
   pb.raf = requestAnimationFrame(pbTick);
 }
@@ -244,19 +286,22 @@ function pbPause() { if (pb) { pb.playing = false; if (pb.raf) cancelAnimationFr
 function pbToggle() {
   if (pb) { pb.playing ? pbPause() : pbPlay(); return; }
   const sel = document.getElementById('daySel');
-  if (sel.value === 'ALL') { sel.value = pbPickDay(); sel.dispatchEvent(new Event('change')); }  // pick a day to show
+  if (sel.value === 'ALL') { sel.value = pbPickDay(); sel.dispatchEvent(new Event('change')); }
   pbPlay();
 }
 function pbSeek(frac) {
   if (!pb && !pbInit(document.getElementById('daySel').value)) return;
-  pb.D = frac * pb.total; pb.done = pb.D >= pb.total;
+  const target = frac * pb.driveSec;
+  let li = 0; while (li < pb.legs.length - 1 && pb.legs[li].cumDur + pb.legs[li].dur <= target) li++;
+  pb.li = li; pb.lt = Math.max(0, Math.min(pb.legs[li].dur, target - pb.legs[li].cumDur));
+  pb.done = frac >= 1; pb.idleUntil = 0;
   pb.trail.clearLayers(); pb.drawn = 0; pb.partial = null;
-  pbRender(pb.D); pbBtnLabel();
+  pbFrameRender(); pbBtnLabel();
 }
 function pbRestyle() {          // colour-mode changed mid-playback: rebuild the trail
   if (!pb) return;
   pb.trail.clearLayers(); pb.drawn = 0; pb.partial = null;
-  pbRender(pb.D);
+  pbFrameRender();
 }
 
 // fit=true reframes the map. Only a change of data (day) or isolating a single
@@ -310,7 +355,7 @@ function render(fit) {
   legend();
 }
 
-getJSON('data/routes.json').then(d => {
+getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema changes (added per-point times)
   DATA = d;
   const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const cov = d.coverage;
@@ -378,7 +423,7 @@ getJSON('data/routes.json').then(d => {
     b.addEventListener('click', () => {
       document.querySelectorAll('#pbSpd button').forEach(x => x.classList.remove('on'));
       b.classList.add('on');
-      if (pb) pb.speed = +b.dataset.s;
+      if (pb) pb.mult = +b.dataset.s;
     }));
   document.addEventListener('keydown', e => {
     if (e.code === 'Space' && pbar.classList.contains('on') &&
@@ -392,6 +437,6 @@ getJSON('data/routes.json').then(d => {
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=26"></script>
+<script src="assets/nav.js?v=27"></script>
 </body>
 </html>

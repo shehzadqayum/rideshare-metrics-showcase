@@ -47,40 +47,64 @@ def ttime(s):
                     tzinfo=timezone.utc).timestamp()
 
 def slice_track(pts, keys, t0, t1):
+    """Return (lat, lon, epoch) triples for the trip window, collapsing each
+    stationary run to its first + last point so a stop keeps its real duration
+    (needed for true-time playback) without bloating the track."""
     if not t0 or not t1 or t1 < t0:
         return []
     lo = bisect.bisect_left(keys, t0 - 20)
     hi = bisect.bisect_right(keys, t1 + 20)
-    seg = [(pts[i][1], pts[i][2]) for i in range(lo, hi)]
-    # drop consecutive duplicate points
+    seg = [(pts[i][1], pts[i][2], pts[i][0]) for i in range(lo, hi)]   # (lat, lon, ep)
     out = []
     for p in seg:
-        if not out or out[-1] != p:
+        if out and out[-1][0] == p[0] and out[-1][1] == p[1]:
+            if len(out) >= 2 and out[-2][0] == p[0] and out[-2][1] == p[1]:
+                out[-1] = p            # extend the dwell: keep entry + latest ep
+            else:
+                out.append(p)          # second point of a new stationary run
+        else:
             out.append(p)
     return out
 
-# ---------------------------------------------------------------- RDP (iterative)
-def rdp(points, eps=0.00008):  # ~9 m
-    if len(points) < 3:
+# ---------------------------------------------------------------- RDP (time-aware)
+def rdp_t(points, eps=0.00008, gap=20):   # ~9 m; points are (lat, lon, ep)
+    """Ramer-Douglas-Peucker on position, but force-keep points that bound a
+    time gap > `gap`s (a stop or sparse sample) so the pacing survives."""
+    n = len(points)
+    if n < 3:
         return points
-    keep = [False] * len(points)
+    keep = [False] * n
     keep[0] = keep[-1] = True
-    stack = [(0, len(points) - 1)]
-    while stack:
-        i0, i1 = stack.pop()
-        ax, ay = points[i0]; bx, by = points[i1]
-        dx, dy = bx - ax, by - ay
-        norm = math.hypot(dx, dy) or 1e-12
-        dmax, idx = 0.0, -1
-        for i in range(i0 + 1, i1):
-            px, py = points[i]
-            d = abs((px - ax) * dy - (py - ay) * dx) / norm
-            if d > dmax:
-                dmax, idx = d, i
-        if dmax > eps and idx != -1:
-            keep[idx] = True
-            stack.append((i0, idx)); stack.append((idx, i1))
-    return [points[i] for i in range(len(points)) if keep[i]]
+    for i in range(1, n):
+        if points[i][2] - points[i - 1][2] > gap:
+            keep[i - 1] = True; keep[i] = True
+    anchors = [i for i in range(n) if keep[i]]
+    for a, b in zip(anchors, anchors[1:]):
+        if b - a < 2:
+            continue
+        stack = [(a, b)]
+        while stack:
+            i0, i1 = stack.pop()
+            ax, ay = points[i0][0], points[i0][1]
+            bx, by = points[i1][0], points[i1][1]
+            dx, dy = bx - ax, by - ay
+            norm = math.hypot(dx, dy) or 1e-12
+            dmax, idx = 0.0, -1
+            for i in range(i0 + 1, i1):
+                px, py = points[i][0], points[i][1]
+                d = abs((px - ax) * dy - (py - ay) * dx) / norm
+                if d > dmax:
+                    dmax, idx = d, i
+            if dmax > eps and idx != -1:
+                keep[idx] = True
+                stack.append((i0, idx)); stack.append((idx, i1))
+    return [points[i] for i in range(n) if keep[i]]
+
+def time_props(seg3):
+    """Per-point relative seconds + the segment's start (seconds since midnight,
+    London = UTC for all GPS-covered dates). Feeds true-time playback."""
+    t0 = seg3[0][2]
+    return {'s0': int(t0 % 86400), 't': [int(round(p[2] - t0)) for p in seg3]}
 
 # ---------------------------------------------------------------- helpers
 # Published tracks must never begin at a habitual origin: the first en-route
@@ -178,8 +202,8 @@ def main():
             tid = t.get('trip_id')
             ts = t.get('timestamps') or {}
             acc, pick, drop = ttime(ts.get('accept')), ttime(ts.get('pickup')), ttime(ts.get('dropoff'))
-            enr = trim_head(rdp(slice_track(pts, keys, acc, pick)))
-            trp = rdp(slice_track(pts, keys, pick, drop))
+            enr = trim_head(rdp_t(slice_track(pts, keys, acc, pick)))   # (lat,lon,ep) triples
+            trp = rdp_t(slice_track(pts, keys, pick, drop))
             has = len(trp) >= 2 or len(enr) >= 2
             met = t.get('metrics') or {}
             svc = (t.get('service') or '').upper() or None
@@ -188,7 +212,7 @@ def main():
             if not mi and len(trp) >= 2:   # fall back to measuring the GPS track itself
                 tot = 0.0
                 for j in range(len(trp) - 1):
-                    la1, lo1 = trp[j]; la2, lo2 = trp[j + 1]
+                    la1, lo1 = trp[j][0], trp[j][1]; la2, lo2 = trp[j + 1][0], trp[j + 1][1]
                     dla = math.radians(la2 - la1); dlo = math.radians(lo2 - lo1)
                     aa = math.sin(dla / 2) ** 2 + math.cos(math.radians(la1)) * math.cos(math.radians(la2)) * math.sin(dlo / 2) ** 2
                     tot += 2 * 3958.8 * math.asin(math.sqrt(aa))
@@ -209,19 +233,20 @@ def main():
             }
             if has:
                 gps += 1; wg += 1
-                # store [lat,lon] for dashboard (Leaflet wants lat,lon)
-                tracks_by_id[tid] = {'enroute': [[a, b] for a, b in enr],
-                                     'trip': [[a, b] for a, b in trp]}
+                # dashboard keeps position-only [lat,lon] (no per-point time — it
+                # doesn't animate); routes.json carries the timing for playback.
+                tracks_by_id[tid] = {'enroute': [[a, b] for a, b, _ in enr],
+                                     'trip': [[a, b] for a, b, _ in trp]}
                 day = tid[:8]
                 fc = days.setdefault(day, [])
                 if len(enr) >= 2:
                     fc.append({'type': 'Feature',
-                               'geometry': {'type': 'LineString', 'coordinates': [[b, a] for a, b in enr]},
-                               'properties': dict(props_common, seg='enroute')})
+                               'geometry': {'type': 'LineString', 'coordinates': [[b, a] for a, b, _ in enr]},
+                               'properties': dict(props_common, seg='enroute', **time_props(enr))})
                 if len(trp) >= 2:
                     fc.append({'type': 'Feature',
-                               'geometry': {'type': 'LineString', 'coordinates': [[b, a] for a, b in trp]},
-                               'properties': dict(props_common, seg='trip')})
+                               'geometry': {'type': 'LineString', 'coordinates': [[b, a] for a, b, _ in trp]},
+                               'properties': dict(props_common, seg='trip', **time_props(trp))})
         week_cov[wk] = {'label': label, 'trips': len(wtrips), 'gps': wg}
 
     # routes.json for routes.html
