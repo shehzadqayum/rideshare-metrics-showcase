@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=32">
+<link rel="stylesheet" href="assets/style.css?v=33">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -72,14 +72,15 @@
       as one instrument cluster: day navigation and the player across the foot (the day label opens a
       picker for all 31 days), the colour modes folding up out of that bar behind <b>⚙ Layers</b>, the
       legend pinned top-right so it stays readable while a day plays, and a live speedometer bottom-left
-      showing current speed, the average since the shift began, and the true date and time.</li>
+      showing current speed, the average for the job in hand beside the average for the whole shift so far
+      — the gap between them is the unpaid approach — and the true date and time.</li>
     </ul>
   </div>
 
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=32"></script>
+<script src="assets/site.js?v=33"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -217,23 +218,31 @@ function pbGaugeBuild(mapEl) {
        <span style="font-size:.62rem;font-weight:600;letter-spacing:.08em;color:#545f68">MPH</span>
      </div>
      <div class="rows">
-       <div><span>avg<span class="lg"> from start</span></span><b class="avg">—</b></div>
+       <div><span>trip<span class="lg"> so far</span></span><b class="tavg">—</b></div>
+       <div><span>shift<span class="lg"> so far</span></span><b class="avg">—</b></div>
        <div><span class="date">—</span><b class="time">—:—</b></div>
      </div>`;
   mapEl.appendChild(box);
   return { box, arc: box.querySelector('.arc'), ndl: box.querySelector('.ndl'),
            mph: box.querySelector('.mph'), avg: box.querySelector('.avg'),
+           tavg: box.querySelector('.tavg'),
            date: box.querySelector('.date'), time: box.querySelector('.time') };
 }
 
-function pbGaugeUpdate(mph, avgMph, absSec) {
+// Two averages, because the gap between them IS the unpaid-approach story the
+// rest of the site argues: the shift figure carries every crawl to a pickup,
+// the trip figure only the job in hand. Both are moving averages - waits
+// between jobs are never added to either.
+const avgTxt = v => v == null ? '—' : v.toFixed(1) + ' mph';
+function pbGaugeUpdate(mph, tripAvg, shiftAvg, absSec) {
   if (!gauge || !pb) return;
   const t = Math.max(0, Math.min(1, mph / GAUGE_MAX));
   gauge.arc.setAttribute('stroke-dasharray', t.toFixed(4) + ' 1');
   gauge.arc.setAttribute('stroke', speedColor(mph));
   gauge.ndl.setAttribute('transform', `rotate(${gaugeAngle(mph).toFixed(1)} 60 56)`);
   gauge.mph.textContent = Math.round(mph);
-  gauge.avg.textContent = avgMph == null ? '—' : avgMph.toFixed(1) + ' mph';
+  gauge.tavg.textContent = avgTxt(tripAvg);
+  gauge.avg.textContent = avgTxt(shiftAvg);
   gauge.date.textContent = dayDate(pb.day, absSec);
   gauge.time.textContent = hhmm(absSec);
 }
@@ -255,7 +264,7 @@ function dayLegs(dayKey) {
     });
   });
   // absolute (midnight-unwrapped) start, idle gaps, cumulative duration + day totals
-  let off = 0, prev = -1, driveSec = 0, distMi = 0;
+  let off = 0, prev = -1, driveSec = 0, distMi = 0, curId = null, tSec0 = 0, tMi0 = 0;
   legs.forEach((l, i) => {
     if (prev >= 0 && l.s0 < prev - 3600) off += 86400;   // crossed midnight
     l.abs = l.s0 + off; prev = l.s0;
@@ -265,6 +274,12 @@ function dayLegs(dayKey) {
     // jumps pb.li/pb.lt without replaying, which would leave a running total
     // permanently wrong. Measured 0.8 ms to build across a 1,885-point day.
     l.cumMi = distMi;
+    // Where the CURRENT job began, so the gauge can show this trip's average
+    // beside the shift's. Legs arrive grouped by trip id (en-route then paid),
+    // so the first leg of each id marks the job's origin. Waits before a job
+    // fall outside both, since only leg durations are ever summed.
+    if (l.id !== curId) { curId = l.id; tSec0 = l.cumDur; tMi0 = l.cumMi; }
+    l.tripSec0 = tSec0; l.tripMi0 = tMi0;
     l.pfx = [0];
     for (let k = 1; k < l.pts.length; k++) {
       l.pfx[k] = l.pfx[k - 1] + hmiles(l.pts[k - 1], l.pts[k]);
@@ -334,9 +349,15 @@ function pbFrameRender() {
   pbReadout(leg);
   const doneSec = leg.cumDur + pb.lt;
   const doneMi = leg.cumMi + leg.pfx[pos.j] + hmiles(leg.pts[pos.j], pos.latlng);
-  // Under a minute the average is Infinity at t=0 and meaningless just after,
-  // including after any seek back to the start.
-  pbGaugeUpdate(pb.spd, doneSec > 60 ? doneMi / (doneSec / 3600) : null, leg.abs + pb.lt);
+  // Both averages are Infinity at zero elapsed and meaningless just after —
+  // including after any seek back to a start — so each is withheld until it
+  // has enough time under it to mean something. A job is far shorter than a
+  // shift, so it earns its number sooner.
+  const tSec = doneSec - leg.tripSec0;
+  pbGaugeUpdate(pb.spd,
+    tSec > 30 ? (doneMi - leg.tripMi0) / (tSec / 3600) : null,
+    doneSec > 60 ? doneMi / (doneSec / 3600) : null,
+    leg.abs + pb.lt);
   if (!pb.scrubbing) pbEls.seek.value = Math.round(pbProgress() * 1000);
 }
 function pbReadout(leg) {
@@ -400,7 +421,9 @@ function pbTick(ts) {
       // stale values while the clock visibly jumps — the car is parked, and the
       // time shown must be when the next job actually starts.
       pb.spd = 0;
-      pbGaugeUpdate(0, nxt.cumDur > 60 ? nxt.cumMi / (nxt.cumDur / 3600) : null, nxt.abs);
+      // Parked between jobs: the next trip has not begun, so it has no average
+      // yet — only the shift carries through the wait.
+      pbGaugeUpdate(0, null, nxt.cumDur > 60 ? nxt.cumMi / (nxt.cumDur / 3600) : null, nxt.abs);
       pbFlashIdle(nxt.gap); pb.raf = requestAnimationFrame(pbTick); return;
     }
   }
@@ -753,6 +776,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=32"></script>
+<script src="assets/nav.js?v=33"></script>
 </body>
 </html>
