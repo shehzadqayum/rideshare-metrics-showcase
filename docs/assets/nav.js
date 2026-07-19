@@ -66,7 +66,13 @@
     '.rsdd .menu a b{display:block;color:var(--n-fg);font-size:.85rem;font-weight:600}',
     '.rsdd .menu a i{display:block;font-style:normal;color:var(--n-mut);font-size:.74rem;margin-top:1px}',
     '@media(max-width:820px){.rsnav .in{flex-wrap:wrap;gap:1px}.rsnav a{padding:5px 7px;font-size:.8rem}',
-    '  .rsnav .sp{flex-basis:100%;height:0}.rsdd .menu{right:auto;left:0}}'
+    '  .rsnav .sp{flex-basis:100%;height:0}.rsdd .menu{right:auto;left:0}}',
+    /* The skip link's hiding styles must live HERE, not in style.css: the
+       generated dashboards load nav.js but not style.css, and an unstyled
+       skip link renders as visible text above the toolbar. */
+    '.rsskip{position:absolute;left:-9999px;top:0;z-index:1002;background:var(--n-bg);color:var(--n-fg);',
+    '  border:1px solid var(--n-acc);border-radius:0 0 8px 0;padding:9px 14px;font-size:.85rem;text-decoration:none}',
+    '.rsskip:focus{left:0}'
   ].join('');
 
   var st = document.createElement('style');
@@ -77,12 +83,20 @@
   function link(h, t, cls) {
     return '<a href="' + up + h + '"' + (cls ? ' class="' + cls + '"' : '') + '>' + t + '</a>';
   }
-  // The toolbar is a wall of links before the content on every page, so give
-  // keyboard and screen-reader users a way past it.
-  var skip = document.createElement('a');
-  skip.className = 'rsskip';
-  skip.href = '#rsmain';
-  skip.textContent = 'Skip to main content';
+  // The toolbar is a wall of links before the content, so give keyboard and
+  // screen-reader users a way past it — but only where the page HAS a main
+  // region to land on. The generated dashboards have neither <main> nor
+  // .wrap, and a skip link with no target is just clutter.
+  var main = document.querySelector('main, .wrap');
+  var skip = null;
+  if (main) {
+    if (!main.id) main.id = 'rsmain';
+    if (!main.hasAttribute('tabindex')) main.setAttribute('tabindex', '-1');
+    skip = document.createElement('a');
+    skip.className = 'rsskip';
+    skip.href = '#' + main.id;
+    skip.textContent = 'Skip to main content';
+  }
 
   var nav = document.createElement('nav');
   nav.className = 'rsnav';
@@ -101,12 +115,11 @@
       }).join('')
     + '</div></div></div>';
   document.body.insertBefore(nav, document.body.firstChild);
-  document.body.insertBefore(skip, nav);
-
-  // Give the skip link a target: the page's own main region, whatever it is.
-  var main = document.querySelector('main, .wrap');
-  if (main && !main.id) main.id = 'rsmain';
-  if (main && !main.hasAttribute('tabindex')) main.setAttribute('tabindex', '-1');
+  if (skip) {
+    document.body.insertBefore(skip, nav);
+    // The skip link sits outside the nav element, so it needs the palette too.
+    Object.keys(P).forEach(function (k) { skip.style.setProperty('--n-' + k, P[k]); });
+  }
 
   // Pages pin their own sticky bars below this one, so publish the real height
   // rather than let them guess: the toolbar wraps to two rows under 820px.

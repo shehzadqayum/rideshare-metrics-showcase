@@ -6,7 +6,7 @@
 <meta name="description" content="EV charging invoices from four networks parsed by AI into per-session records - the cost side of every profitability figure on this site.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>EV running costs — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=20">
+<link rel="stylesheet" href="assets/style.css?v=21">
 </head>
 <body>
 <main class="wrap" id="rsmain">
@@ -42,7 +42,7 @@
   <footer class="site">Tool: Python CLI over the Anthropic API, per-file extraction cache, 82 sessions
   across 19 locations and 4 providers.</footer>
 </main>
-<script src="assets/site.js?v=20"></script>
+<script src="assets/site.js?v=21"></script>
 <script>
 getJSON('data/charging.json').then(c => {
   document.getElementById('hero').innerHTML =
@@ -61,6 +61,6 @@ getJSON('data/charging.json').then(c => {
     Object.entries(c.by_time).map(([k, v]) => ({ label: k, short: k.split(' ')[0], v: v.sessions })), {});
 }).catch(dataFail('the charging data'));
 </script>
-<script src="assets/nav.js?v=20"></script>
+<script src="assets/nav.js?v=21"></script>
 </body>
 </html>
