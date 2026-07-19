@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=30">
+<link rel="stylesheet" href="assets/style.css?v=31">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -77,7 +77,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=30"></script>
+<script src="assets/site.js?v=31"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -308,6 +308,7 @@ function pbTick(ts) {
 }
 function pbInit(dayKey) {
   pbTeardown(false);
+  if (!DATA.days[dayKey]) return false;      // "ALL" has no single day to play
   const { legs, driveSec, distMi } = dayLegs(dayKey);
   if (!legs.length || driveSec < 1) return false;
   if (layer) { layer.remove(); layer = null; }
@@ -504,7 +505,8 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   step.id = 'dayStep';
   step.className = 'ovonly';
   step.innerHTML = '<button type="button" aria-label="Previous day">&lsaquo;</button>' +
-                   '<b></b><button type="button" aria-label="Next day">&rsaquo;</button>';
+                   '<b role="status"></b>' +   // announces the day, as the <select> it replaces did
+                   '<button type="button" aria-label="Next day">&rsaquo;</button>';
   const stepLbl = step.querySelector('b'), stepBtn = step.querySelectorAll('button');
   const stepGo = d => {
     const i = Math.max(1, Math.min(sel.options.length - 1, sel.selectedIndex + d));   // 0 is "All days"
@@ -515,10 +517,17 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   stepBtn[0].addEventListener('click', () => stepGo(-1));
   stepBtn[1].addEventListener('click', () => stepGo(1));
   function syncStep() {
-    stepLbl.textContent = sel.value === 'ALL' ? 'All days'
+    const day = sel.value === 'ALL' ? 'All days'
       : sel.options[sel.selectedIndex].textContent.split(' — ')[0];
-    stepBtn[0].disabled = sel.selectedIndex <= 1;
-    stepBtn[1].disabled = sel.selectedIndex >= sel.options.length - 1;
+    stepLbl.textContent = day;
+    stepBtn[0].setAttribute('aria-label', 'Previous day (showing ' + day + ')');
+    stepBtn[1].setAttribute('aria-label', 'Next day (showing ' + day + ')');
+    const dis = [sel.selectedIndex <= 1, sel.selectedIndex >= sel.options.length - 1];
+    // Stepping to the last day disables the button you just pressed, which
+    // drops focus to <body>; hand it to the sibling before that happens.
+    dis.forEach((d, i) => { if (d && document.activeElement === stepBtn[i]) stepBtn[1 - i].focus(); });
+    stepBtn[0].disabled = dis[0];
+    stepBtn[1].disabled = dis[1];
   }
   document.querySelector('.controls').append(step);
   mapOverlay(map, {
@@ -555,6 +564,10 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   pbEls.btn.addEventListener('click', pbToggle);
   pbEls.seek.addEventListener('input', () => {
     pbPause();
+    // "All days" is the state the page opens in, and there is no DATA.days.ALL,
+    // so scrubbing before pressing Play threw inside the listener - silently,
+    // leaving a dead scrubber. Pick a day the same way Play does.
+    if (sel.value === 'ALL') { sel.value = pbPickDay(); sel.dispatchEvent(new Event('change')); }
     if (!pb && !pbInit(sel.value)) return;
     pb.scrubbing = true; pbSeek(pbEls.seek.value / 1000); pb.scrubbing = false;
   });
@@ -565,8 +578,10 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
       if (pb) pb.mult = +b.dataset.s;
     }));
   document.addEventListener('keydown', e => {
+    // Anchors were missing from the old tag test, so Space on the focused
+    // full-screen control played the day instead of toggling full screen.
     if (e.code === 'Space' && pbar.classList.contains('on') &&
-        !/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName || '')) {
+        !(e.target.closest && e.target.closest('a,button,input,select,textarea'))) {
       e.preventDefault(); pbToggle();
     }
   });
@@ -578,6 +593,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=30"></script>
+<script src="assets/nav.js?v=31"></script>
 </body>
 </html>

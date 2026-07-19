@@ -142,9 +142,38 @@ function mapExtras(map) {
   const nativeOn = () => (document.fullscreenElement || document.webkitFullscreenElement) === el;
   const maxiOn = () => el.classList.contains('rs-maxi');
   const isFull = () => nativeOn() || maxiOn();
+  // Full screen has to contain focus. The pinned mode only PAINTS over the
+  // page: everything behind stays laid out, focusable and in the accessibility
+  // tree, so Tab walked out of the map into content the user cannot see (13
+  // reachable elements on routes.html) with the focus ring apparently gone.
+  // Native full screen renders nothing else at all, with the same result.
+  const setOutsideInert = on => {
+    for (let n = el; n && n.parentNode && n !== document.body; n = n.parentNode) {
+      for (const sib of n.parentNode.children) if (sib !== n) sib.toggleAttribute('inert', on);
+    }
+  };
+
   // Announced so page controls can move into the map for the duration (see
   // mapOverlay). Both routes into full screen have to fire it.
-  const fireFull = () => map.fire('rs:full', { full: isFull() });
+  const fireFull = () => {
+    const on = isFull();
+    // Order matters: the controls must move INTO the map before anything left
+    // outside is marked inert, or they would be inerted on their way past and
+    // stay that way inside the overlay.
+    map.fire('rs:full', { full: on });
+    setOutsideInert(on);
+    if (on) {
+      if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+      el.setAttribute('role', 'dialog');
+      el.setAttribute('aria-modal', 'true');
+      el.setAttribute('aria-label', 'Map, full screen');
+    } else {
+      ['role', 'aria-modal', 'aria-label'].forEach(a => el.removeAttribute(a));
+    }
+    // If focus was left on something now inert or gone, bring it into the map.
+    const a = document.activeElement;
+    if (on && (!a || a === document.body || a.closest('[inert]'))) el.focus({ preventScroll: true });
+  };
 
   // --- resize handling -------------------------------------------------------
   // Two invariants, learned the hard way:
@@ -244,6 +273,11 @@ function mapExtras(map) {
         const p = native.call(el);
         if (p && p.catch) p.catch(() => setMaxi(true));   // refused — pin instead
       });
+      // It presents as role="button", but an anchor fires click on Enter only,
+      // so Space - the other key a button owes its user - did nothing here.
+      L.DomEvent.on(a, 'keydown', e => {
+        if (e.key === ' ' || e.key === 'Spacebar') { L.DomEvent.stop(e); a.click(); }
+      });
       return wrap;
     },
   });
@@ -304,6 +338,9 @@ function mapOverlay(map, spec) {
 
   function adopt(on) {
     if (on === el.classList.contains('rs-ov-on')) return;
+    // Moving a subtree that contains the focused element blurs it, so pressing
+    // Escape from the Play button dropped focus to <body>.
+    const active = document.activeElement;
     if (on) {
       Object.values(hosts).forEach(h => h.nodes.forEach(n => {
         const mark = document.createComment('rs-ov');   // the exact spot to restore to
@@ -316,6 +353,7 @@ function mapOverlay(map, spec) {
       home.clear();
     }
     el.classList.toggle('rs-ov-on', on);
+    if (active && active.isConnected && active !== document.body) active.focus({ preventScroll: true });
     requestAnimationFrame(lift);
   }
 

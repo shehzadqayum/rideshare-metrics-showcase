@@ -120,8 +120,13 @@ footer.site { color:var(--muted); font-size:.74rem; margin-top:44px; border-top:
 .leaflet-container:-webkit-full-screen { width:100% !important; height:100% !important; border-radius:0; }
 /* Fallback when the Fullscreen API is refused: pin the map over the viewport.
    Above the nav (1000) so nothing overlaps it. */
+/* 100vh on iOS Safari is the LARGE viewport - the height with the toolbars
+   retracted - so a pinned map runs under the bottom toolbar and takes the
+   player bar with it (reported on a real iPhone). dvh is the live visible
+   height; the vh line stays first as the fallback for browsers without it. */
 .leaflet-container.rs-maxi { position:fixed !important; inset:0 !important;
-  width:100vw !important; height:100vh !important; z-index:2000 !important; border-radius:0; }
+  width:100vw !important; height:100vh !important; height:100dvh !important;
+  z-index:2000 !important; border-radius:0; }
 body.rs-maxi-lock { overflow:hidden; }
 .rs-fs a { font-size:15px; line-height:26px; text-align:center; font-weight:600; cursor:pointer; }
 
@@ -134,14 +139,25 @@ body.rs-maxi-lock { overflow:hidden; }
    color-mix. */
 .rs-ov { position:absolute; z-index:1100; display:none;
   background:var(--surface);
-  background:color-mix(in srgb, var(--surface) 86%, transparent);
+  background:color-mix(in srgb, var(--surface) 96%, transparent);
   -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
-  border:1px solid var(--border); box-shadow:0 2px 20px rgba(0,0,0,.30); }
+  border:1px solid var(--border); box-shadow:0 2px 20px rgba(0,0,0,.30);
+  /* The hosts live inside the map, so without this every adopted control
+     inherits Leaflet's `12px/1.5 "Helvetica Neue"` instead of the page's type
+     - measured at 12.8px Helvetica on the Play button. Re-establishing the
+     font here also restores rem sizing for everything moved in. */
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif; font-size:1rem;
+  line-height:1.45; color:var(--ink); }
 .rs-ov-on .rs-ov { display:block; }
 .rs-ov-bottom { left:0; right:0; bottom:0; padding:10px 14px; border-width:1px 0 0; }
 .rs-ov-tr { top:12px; right:12px; width:min(42vw,330px); padding:9px 12px; border-radius:10px;
   max-height:calc(100% - 90px); overflow:auto; }
 .rs-ov-on .leaflet-bottom { margin-bottom:var(--rsov-b,0); }
+/* The panel is themed from the page but always sits on the light CARTO tiles,
+   so in the dark scheme whatever bleeds through lightens the background the
+   palette was tuned against and small text loses its contrast budget. --muted
+   is the one that falls below 4.5:1, so it is lifted just inside the overlay. */
+@media (prefers-color-scheme: dark) { .rs-ov { --muted:#a5a39d; } }
 .rs-ov .pbar, .rs-ov .legend, .rs-ov .modebtns { margin:0; }
 .rs-ov .pbnote { display:none; }          /* the standing explanation belongs on the page */
 .rs-ov .legend { margin-top:9px; gap:11px; }
