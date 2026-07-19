@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Surge dashboard — ride-share metrics</title>
 <link rel="stylesheet" href="assets/style.css?v=8">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 <style>
   .daybar { position:sticky; top:var(--rsnav-h, 52px); z-index:5; background:var(--page); padding:10px 0 8px; border-bottom:1px solid var(--border); margin-bottom:14px; }
   .daybar .lab { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px; }
@@ -101,7 +101,10 @@
   <div class="divider"></div>
   <h2>Surge forecast <span style="font-weight:400;color:var(--muted);font-size:.8rem" id="fcTitle"></span></h2>
   <div class="note" style="margin-bottom:8px">A separate worked example — the hour-by-hour forecast the system
-    generates from all the feeds above. <a id="fullReport" href="dashboards/surge_report.html">Full report →</a></div>
+    generates from all the feeds above. <a id="fullReport" href="dashboards/surge_report.html">Full report →</a>
+    <br>The report ran at 03:22, and its generator took the weekday from its own clock rather than from the
+    forecast date, so some window text below still reads “Friday”. The date is correct; the day name in that
+    prose is not. It is left as generated — this page shows the pipeline's real output, warts included.</div>
   <div class="panel">
     <h3>Hourly intensity by signal</h3>
     <div style="overflow-x:auto"><div class="heat" id="heat"></div></div>
@@ -124,8 +127,8 @@
   report, and the SQLite session log. Map: OpenStreetMap / CARTO. Nothing mocked.</footer>
 </main>
 <script src="assets/site.js?v=8"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js" integrity="sha384-mFKkGiGvT5vo1fEyGCD3hshDdKmW3wzXW/x+fWriYJArD0R3gawT6lMvLboM22c0" crossorigin="anonymous"></script>
 <script>
 const HEATC = ['rgba(137,135,129,.16)', '#3fa34d', '#f5c542', '#f59e42', '#f5564a'];
 const HEATNAME = ['Baseline', 'Low', 'Moderate', 'High', 'Very High'];
@@ -159,7 +162,7 @@ function lineChart(el, pts, opts) {
   el.innerHTML = s + '</svg>'; bindTips(el);
 }
 
-let map, heatLayer, markerGroup, heatOn = true;
+let map, heatLayer, markerGroup, heatOn = true;   // resynced from the checkbox on init
 
 getJSON('data/demand.json').then(D => {
   const F = D.forecast, S = D.session, C = D.captures;
@@ -171,6 +174,9 @@ getJSON('data/demand.json').then(D => {
   // markers pane sits above the heat (overlayPane 400) but below Leaflet's tooltipPane (650)
   map.createPane('markers'); map.getPane('markers').style.zIndex = 620;
   markerGroup = L.layerGroup().addTo(map);
+  // Browsers restore checkbox state across reloads and back-navigation, so read
+  // the real state rather than assume the markup's default.
+  heatOn = document.getElementById('heatToggle').checked;
   document.getElementById('heatToggle').addEventListener('change', e => {
     heatOn = e.target.checked;
     if (heatLayer) { if (heatOn) heatLayer.addTo(map); else map.removeLayer(heatLayer); }
@@ -233,12 +239,12 @@ getJSON('data/demand.json').then(D => {
     document.getElementById('tflCards').innerHTML =
       card(fmt(c.road), 'road disruptions', Object.entries(c.road_by_severity || {}).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(' · ') || 'TfL') +
       card(fmt(c.station), 'station issues', `${c.closures ?? 0} closures`) +
-      card(c.line_disruptions.length, 'line disruptions', 'active');
-    document.getElementById('lsNote').textContent = c.lines.length ? `${c.lines.length} lines monitored` : '';
-    document.getElementById('lines').innerHTML = c.lines.length ? c.lines.map(l =>
+      card((c.line_disruptions || []).length, 'line disruptions', 'active');
+    document.getElementById('lsNote').textContent = (c.lines || []).length ? `${c.lines.length} lines monitored` : '';
+    document.getElementById('lines').innerHTML = (c.lines || []).length ? c.lines.map(l =>
       `<div class="lineitem" ${l.reason ? `title="${l.reason.replace(/"/g, '&quot;')}"` : ''}><span>${l.name}</span>
        <span class="status" style="color:var(${sev[l.status] || '--muted'})">${l.status}</span></div>`).join('') : na;
-    document.getElementById('ld').innerHTML = c.line_disruptions.length ? c.line_disruptions.map(l =>
+    document.getElementById('ld').innerHTML = (c.line_disruptions || []).length ? c.line_disruptions.map(l =>
       `<div style="margin-bottom:8px"><b style="color:var(--ink)">${l.line}</b> — <span style="color:var(${sev[l.status] || '--muted'})">${l.status}</span><br><span style="color:var(--muted)">${l.reason}</span></div>`).join('')
       : '<span style="color:var(--muted)">no active line disruptions</span>';
 
@@ -256,7 +262,7 @@ getJSON('data/demand.json').then(D => {
     document.getElementById('evtCards').innerHTML =
       card(fmt(c.events), 'ticketed events', Object.entries(c.events_by_type || {}).slice(0, 2).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(' · ') || 'Ticketmaster') +
       card((c.football_london ?? 0), 'London fixtures', `${c.football_total ?? '?'} nationwide`) +
-      card(c.events_next6.length, 'events next 6h', 'starting soon');
+      card((c.events_next6 || []).length, 'events next 6h', 'starting soon');
     document.getElementById('fix').innerHTML = (c.football_list || []).length
       ? c.football_list.map(f => `<div><b style="color:var(--ink)">${fdate(f.date)}${f.kickoff ? ' ' + f.kickoff : ''}</b> — ${f.home} v ${f.away} <span style="color:var(--muted)">· ${f.comp}</span></div>`).join('') : na;
     document.getElementById('evt6').innerHTML = (c.events_next6 || []).length

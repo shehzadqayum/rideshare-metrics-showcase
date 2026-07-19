@@ -1,0 +1,100 @@
+# -*- coding: utf-8 -*-
+"""Re-apply the showcase's post-hoc patches to the two generated dashboards.
+
+The dashboards are pipeline artifacts kept close to what the pipeline emits, so
+every change the showcase needs is applied here rather than by hand-editing the
+generated file. Each patch is delimited by an HTML marker comment and is
+idempotent: running this repeatedly is a no-op, and running it after the
+pipeline regenerates a dashboard restores the showcase's fixes.
+
+Existing marker blocks (GLOSSARY, MAPFX, TIDY) were applied by earlier ad-hoc
+scripts; this file adds the SHELL block and is where any future patch belongs.
+"""
+import io, os, re
+
+DOCS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'docs')
+DASHBOARDS = ['cnhr_dashboard.html', 'surge_report.html']
+
+FAVICON = ("<link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' "
+           "viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E\">")
+
+# The dashboards are hard-coded dark and declare no custom properties, so the
+# patched-in blocks that use var(--surface) etc. rendered unstyled. Scope
+# fallbacks to those blocks only, using the dashboards' own palette.
+SHELL = """<!--SHELL-->
+<style>
+  #glossary{--surface:#0a0f1a;--border:#1e293b;--text:#e2e8f0;--text-muted:#94a3b8;--accent:#f59e0b}
+  #map-legend{--text-muted:#94a3b8;--accent:#f59e0b}
+  /* Leaflet controls sit at z-index 1000 and tie with the injected toolbar;
+     the later DOM node would win, putting zoom buttons over the nav. */
+  .leaflet-top,.leaflet-bottom{z-index:900}
+  /* The generated stat grid holds 3 columns down to 0px; a 22px bold figure
+     plus padding will not fit a third of a phone, forcing the page sideways. */
+  @media(max-width:460px){.stats{grid-template-columns:repeat(2,1fr)}}
+  /* Wide generated tables should scroll in place, not drag the page. */
+  @media(max-width:700px){.table-wrap,.trips-table-wrap{overflow-x:auto}}
+  /* Rows for trips with no GPS track must not advertise themselves as clickable. */
+  tr.map-clickable.no-track{cursor:default}
+  tr.map-clickable.no-track td:first-child{opacity:.55}
+</style>
+<script>
+// 406 of 762 trips have no GPS track, but every row is click-wired to
+// mapShowTrip, which calls mapClearAll() *before* discovering there is no layer
+// to draw - blanking the map with no explanation. Guard it, and mark the rows.
+window.addEventListener('load', function () {
+  if (typeof window.mapShowTrip !== 'function' || window.__trackGuard) return;
+  window.__trackGuard = true;
+  var inner = window.mapShowTrip;
+  window.mapShowTrip = function (num) {
+    var w = (typeof W !== 'undefined' && typeof selIdx !== 'undefined') ? W[selIdx] : null;
+    var t = w && w.trips && w.trips.filter(function (x) { return x.n === num; })[0];
+    if (t && t.has_gps_track === false) return;   // leave the map as it is
+    return inner.apply(this, arguments);
+  };
+  function markRows() {
+    var w = (typeof W !== 'undefined' && typeof selIdx !== 'undefined') ? W[selIdx] : null;
+    if (!w || !w.trips) return;
+    var noTrack = {};
+    w.trips.forEach(function (t) { if (t.has_gps_track === false) noTrack[t.n] = 1; });
+    Array.prototype.forEach.call(document.querySelectorAll('tr.map-clickable'), function (r) {
+      var c = r.querySelector('td');
+      var n = c && parseInt(c.textContent, 10);
+      var off = n && noTrack[n];
+      r.classList.toggle('no-track', !!off);
+      if (off) r.title = 'No GPS track recorded for this trip';
+    });
+  }
+  markRows();
+  document.addEventListener('click', function () { setTimeout(markRows, 60); }, true);
+});
+</script>
+<!--/SHELL-->"""
+
+
+def patch(path):
+    s = io.open(path, encoding='utf-8', errors='ignore').read()
+    orig, log = s, []
+
+    if 'rel="icon"' not in s:
+        s = re.sub(r'(<meta name="viewport"[^>]*>)', r'\1\n' + FAVICON, s, count=1)
+        log.append('favicon')
+
+    if '<!--SHELL-->' in s:
+        s = re.sub(r'<!--SHELL-->.*?<!--/SHELL-->', SHELL, s, flags=re.S)
+        log.append('shell (refreshed)')
+    else:
+        s = s.replace('</head>', SHELL + '\n</head>', 1)
+        log.append('shell')
+
+    if s != orig:
+        io.open(path, 'w', encoding='utf-8', newline='\n').write(s)
+    return log
+
+
+for fn in DASHBOARDS:
+    p = os.path.join(DOCS, 'dashboards', fn)
+    if not os.path.exists(p):
+        print('%-24s missing, skipped' % fn)
+        continue
+    log = patch(p)
+    print('%-24s %s' % (fn, ', '.join(log) if log else '(already current)'))

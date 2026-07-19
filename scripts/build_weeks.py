@@ -7,8 +7,9 @@ area-reduced pickup/dropoff labels.
 """
 import json, math, os
 
-DASH = r'C:\Users\Caldera\Projects\rideshare-metrics-showcase\docs\dashboards\cnhr_dashboard.html'
-OUT = r'C:\Users\Caldera\Projects\rideshare-metrics-showcase\docs\data\weeks.json'
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DASH = os.path.join(REPO, 'docs', 'dashboards', 'cnhr_dashboard.html')
+OUT = os.path.join(REPO, 'docs', 'data', 'weeks.json')
 
 def parse_W(path):
     s = open(path, encoding='utf-8', errors='ignore').read()
@@ -57,7 +58,11 @@ for w in W:
             'mins': round(hrs * 60, 1), 'mi': round(mi, 2),
             'util': round(float(t.get('util') or 0), 3),
             'rho': t.get('rho_paid'), 'rho_true': t.get('rho_true'),
-            'mnhr': t.get('mnhr_true'), 'rn': t.get('r_n'),
+            'mnhr': t.get('mnhr_true'),
+            # The four-state test is mnhr_true_ema > r_n (uber_screen engine.py),
+            # so the smoothed *true* series has to travel with the state.
+            'mnhr_ema': t.get('mnhr_true_ema'),
+            'rn': t.get('r_n'),
             'cum_e': t.get('cum_e'), 'cum_h': t.get('cum_h'),
             'rec': t.get('recovery_pct'), 'state': t.get('four_state'),
             'from': t.get('pickup'), 'to': t.get('dropoff'),
@@ -66,12 +71,19 @@ for w in W:
             'trip': trk, 'enroute': enr,
             'pu': t.get('pickup_pos'), 'do': t.get('dropoff_pos'),
         })
+    # The dashboard's final_mnhr_ema is the *paid* EMA, but final_state is decided
+    # by the *true* EMA, so publishing the former next to the state produced weeks
+    # that appeared to contradict the framework's own rule. Carry the value the
+    # state is actually derived from.
+    last = w['trips'][-1] if w.get('trips') else {}
     weeks.append({
         'key': w.get('key'), 'label': w.get('label'),
         'n': w.get('total_n'), 'gps': len(gps),
         'earnings': w.get('total_e'), 'hours': w.get('total_h'),
         'rn': w.get('final_r_n'), 'rho': w.get('final_rho'),
-        'mnhr': w.get('final_mnhr_ema'), 'state': w.get('final_state'),
+        'mnhr': last.get('mnhr_true_ema'),
+        'mnhr_paid_ema': w.get('final_mnhr_ema'),
+        'state': w.get('final_state'),
         'be_trip': w.get('be_trip'), 'target_trip': w.get('target_trip'),
         'trips': trips,
     })

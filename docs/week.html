@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Week deep dive — ride-share metrics</title>
 <link rel="stylesheet" href="assets/style.css?v=8">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 <style>
   .weekbar { position:sticky; top:var(--rsnav-h, 52px); z-index:5; background:var(--page); padding:10px 0 8px;
     border-bottom:1px solid var(--border); margin-bottom:14px; }
@@ -89,7 +89,7 @@
   tracks re-derived from the raw GPX logs. Map tiles © OpenStreetMap / CARTO.</footer>
 </main>
 <script src="assets/site.js?v=8"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 const STATE_C = { SUSTAINED:'#15803d', ACCEL_REC:'#0e7490', DECEL:'#b45309', STALLED:'#b91c1c' };
 const STATE_L = { SUSTAINED:'Sustained', ACCEL_REC:'Accel recovery', DECEL:'Decelerating', STALLED:'Stalled' };
@@ -137,7 +137,7 @@ function tipFor(t) {
     + row('Trip', `${t.mins ? Math.round(t.mins) + ' min' : '?'}${t.mi ? ' · ' + t.mi.toFixed(1) + ' mi' : ''}`)
     + row('Utilisation', Math.round((t.util || 0) * 100) + '% paid')
     + row('ρ paid / true', money(t.rho) + ' / ' + money(t.rho_true))
-    + row('MNHR (true)', money(t.mnhr) + '/hr')
+    + row('MNHR true / smoothed', money(t.mnhr) + ' / ' + money(t.mnhr_ema))
     + row('£ per hour / mile', money(t.per_hr) + ' / ' + (t.per_mi ? money(t.per_mi) : 'n/a'))
     + row('CNHR after trip', money(t.rn) + '/hr')
     + row('Cumulative', money(t.cum_e) + ' · ' + (+t.cum_h || 0).toFixed(1) + 'h')
@@ -217,7 +217,8 @@ function selectWeek(i) {
     card(WK.n, 'trips', `${WK.gps} with GPS route`) +
     card('£' + fmt(WK.earnings, 2), 'earnings', `${fmt(WK.hours, 1)} h paid`) +
     card('£' + fmt(WK.rn, 2), 'CNHR', 'after £430 weekly cost') +
-    card('£' + fmt(WK.mnhr, 2), 'MNHR (EMA)', 'marginal rate') +
+    card('£' + fmt(WK.mnhr, 2), 'MNHR (true, EMA)',
+         (WK.mnhr > WK.rn ? 'above' : 'below') + ' CNHR → ' + (WK.mnhr > WK.rn ? 'improving' : 'deteriorating')) +
     card(STATE_L[WK.state] || WK.state || '—', 'four-state', WK.be_trip ? `break-even @ #${WK.be_trip}` : 'no break-even');
   document.getElementById('wkTable').innerHTML =
     '<table><tr><th>#</th><th>Day</th><th>Time</th><th>Service</th><th>From → To</th>'

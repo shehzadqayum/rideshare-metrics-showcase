@@ -113,30 +113,30 @@
     <div class="note">Where the week stands, from CNHR alone</div>
     <table>
       <tr><th>Phase</th><th>Condition</th><th>Meaning</th></tr>
-      <tr><td><b style="color:#dc2626">DEFICIT</b></td><td class="sym">rₙ &lt; 0</td><td>Still behind — costs not yet covered</td></tr>
-      <tr><td><b style="color:#d97706">RECOVERY</b></td><td class="sym">0 ≤ rₙ &lt; r*</td><td>Costs covered, working toward target</td></tr>
-      <tr><td><b style="color:#059669">TARGET</b></td><td class="sym">rₙ ≥ r*</td><td>At or above the target rate</td></tr>
+      <tr><td><b style="color:var(--st-stall)">DEFICIT</b></td><td class="sym">rₙ &lt; 0</td><td>Still behind — costs not yet covered</td></tr>
+      <tr><td><b style="color:var(--st-dec)">RECOVERY</b></td><td class="sym">0 ≤ rₙ &lt; r*</td><td>Costs covered, working toward target</td></tr>
+      <tr><td><b style="color:var(--st-acc)">TARGET</b></td><td class="sym">rₙ ≥ r*</td><td>At or above the target rate</td></tr>
     </table>
   </div>
 
   <h2>The four-state diagnostic</h2>
   <div class="note" style="margin-bottom:8px">Position (CNHR) × direction (MNHR trend). This is the signal the
     dashboards colour-code each week by.</div>
-  <div class="matrix">
+  <div style="overflow-x:auto"><div class="matrix" style="min-width:420px">
     <div class="hd"></div>
     <div class="hd">Improving — m̃_true &gt; rₙ</div>
     <div class="hd">Deteriorating — m̃_true ≤ rₙ</div>
     <div class="hd" style="align-items:center">Above target<br><span class="sym">rₙ ≥ r*</span></div>
-    <div class="st" style="border-left:3px solid #22c55e"><b style="color:#22c55e">SUSTAINED</b>
+    <div class="st" style="border-left:3px solid var(--st-sus)"><b style="color:var(--st-sus)">SUSTAINED</b>
       Above target and still pulling up. Keep doing exactly this.</div>
-    <div class="st" style="border-left:3px solid #d97706"><b style="color:#d97706">DECELERATING</b>
+    <div class="st" style="border-left:3px solid var(--st-dec)"><b style="color:var(--st-dec)">DECELERATING</b>
       Above target but the marginal rate is dropping — the good position is eroding.</div>
     <div class="hd" style="align-items:center">Below target<br><span class="sym">rₙ &lt; r*</span></div>
-    <div class="st" style="border-left:3px solid #059669"><b style="color:#059669">ACCEL RECOVERY</b>
+    <div class="st" style="border-left:3px solid var(--st-acc)"><b style="color:var(--st-acc)">ACCEL RECOVERY</b>
       Behind, but recent trips beat the average — momentum is closing the gap.</div>
-    <div class="st" style="border-left:3px solid #dc2626"><b style="color:#dc2626">STALLED</b>
+    <div class="st" style="border-left:3px solid var(--st-stall)"><b style="color:var(--st-stall)">STALLED</b>
       Behind and not improving. Change something: area, hours, or trip selection.</div>
-  </div>
+  </div></div>
   <div class="q">The value of the 2×2 is that a below-target week isn't automatically bad —
     <b>ACCEL RECOVERY</b> says the week is being rescued, while <b>DECELERATING</b> warns that a
     comfortable-looking week is quietly slipping.</div>

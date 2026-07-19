@@ -5,7 +5,10 @@
   --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#726f6a;
   --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,0.10);
   --s1:#2470cc; --s2:#1baf7a; --s3:#eda100; --s5:#4a3aa7; --s6:#e34948; --s8:#eb6834;
-  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --good:#0f8a0f; --warn:#8a6100; --serious:#b4501f; --critical:#c02626;
+  /* Four-state diagnostic. Used as text, so each theme needs its own value —
+     no single hue clears 4.5:1 on both a near-white and a near-black panel. */
+  --st-sus:#15803d; --st-acc:#0e7490; --st-dec:#b45309; --st-stall:#b91c1c;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -13,6 +16,8 @@
     --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
     --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
     --s1:#3987e5; --s2:#199e70; --s3:#c98500; --s5:#9085e9; --s6:#e66767; --s8:#d95926;
+    --good:#4ade80; --warn:#fbbf24; --serious:#fb923c; --critical:#f87171;
+    --st-sus:#4ade80; --st-acc:#22d3ee; --st-dec:#fbbf24; --st-stall:#f87171;
   }
 }
 * { box-sizing:border-box; margin:0; }

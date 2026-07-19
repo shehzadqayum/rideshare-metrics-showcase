@@ -17,6 +17,21 @@ OUT = os.path.join(os.path.dirname(__file__), '..', 'docs', 'data', 'demand.json
 def clean(t):
     return html.unescape(re.sub(r'\s+', ' ', t or '')).strip()
 
+def fix_weekday(title):
+    """The generator names the weekday from its own run context, so a report
+    produced after midnight carries the previous day's name (9 May 2026 is a
+    Saturday, not the Friday the source title claims). The date is authoritative;
+    correct the weekday to match it rather than publish a heading that is wrong."""
+    m = re.search(r'\b(\w+day) (\d{1,2}) (\w+) (\d{4})', title or '')
+    if not m:
+        return title
+    try:
+        d = datetime.strptime('%s %s %s' % m.group(2, 3, 4), '%d %B %Y')
+    except ValueError:
+        return title
+    real = d.strftime('%A')
+    return title.replace(m.group(1) + ' ', real + ' ', 1) if real != m.group(1) else title
+
 # ---------------------------------------------------------------- surge forecast (the pipeline's product)
 def read_forecast():
     hp = glob.glob(REPORTS + '/*_surge_report.html')
@@ -26,6 +41,7 @@ def read_forecast():
     s = open(hp[0], encoding='utf-8', errors='ignore').read()
     body = s[s.find('</style>'):]
     title = clean(re.search(r'<title>([^<]+)</title>', s).group(1)) if re.search(r'<title>([^<]+)</title>', s) else 'Surge Report'
+    title = fix_weekday(title)
 
     # heatmap: 6 category rows x 17 hours (06..22), levels 0..4, DOM order is row-major
     grid = body[body.find('heatmap-grid'):body.find('heatmap-legend')]

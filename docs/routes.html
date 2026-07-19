@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
 <link rel="stylesheet" href="assets/style.css?v=8">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
 <main class="wrap" id="rsmain">
@@ -57,7 +57,7 @@
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
 <script src="assets/site.js?v=8"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
 const segColor = { trip: '#2a78d6', enroute: '#8a8a85', deadhead: '#e34948' };
@@ -167,7 +167,9 @@ getJSON('data/routes.json').then(d => {
     o.textContent = `${(+k.slice(6, 8))} ${MON[+k.slice(4, 6) - 1]} — ${n} trip${n === 1 ? '' : 's'}`;
     sel.append(o);
   });
-  map = L.map('map', { scrollWheelZoom: true }).setView([51.52, -0.08], 11);
+  // Matches week.html and demand.html: a full-width map that swallowed the
+  // wheel would trap the page scroll. Ctrl/⌘+wheel and the +/- controls zoom.
+  map = L.map('map', { scrollWheelZoom: false }).setView([51.52, -0.08], 11);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
     { attribution: '© OpenStreetMap, © CARTO', maxZoom: 19 }).addTo(map);
   // click empty map to clear an isolated trip (ignore the click that did the isolating)
