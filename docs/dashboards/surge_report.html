@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Surge intelligence report</title>
-<link rel="stylesheet" href="../assets/style.css?v=28">
+<link rel="stylesheet" href="../assets/style.css?v=29">
 <style>
   .back { display:inline-block; margin:14px 0 0; font-size:.85rem; }
   .heat { display:grid; grid-template-columns:120px repeat(17,1fr); gap:3px; min-width:780px; }
@@ -212,7 +212,7 @@ window.addEventListener('load', function () {
 
   <footer class="site">Reformatted from the pipeline-generated surge report. Data: ../data/demand.json.</footer>
 </div>
-<script src="../assets/site.js?v=28"></script>
+<script src="../assets/site.js?v=29"></script>
 <script>
 const HEAT = ['rgba(137,135,129,.16)', '#3fa34d', '#f5c542', '#f59e42', '#f5564a'];
 const HEATNAME = ['Baseline', 'Low', 'Moderate', 'High', 'Very High'];
@@ -242,6 +242,6 @@ fetch('../data/demand.json').then(r => r.json()).then(D => {
     F.conditions.map(c => `<tr><td><b>${c.system}</b></td><td style="color:var(--ink2)">${c.status}</td></tr>`).join('') + '</table>' : '';
 });
 </script>
-<script src="../assets/nav.js?v=28"></script>
+<script src="../assets/nav.js?v=29"></script>
 </body>
 </html>

@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=28">
+<link rel="stylesheet" href="assets/style.css?v=29">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -43,12 +43,13 @@
   <div class="pbar" id="pbar">
     <button class="pbtn" id="pbBtn" type="button">▶ Play day</button>
     <input type="range" id="pbSeek" min="0" max="1000" value="0" aria-label="Playback position">
-    <span class="spd" id="pbSpd" role="group" aria-label="Playback speed">
-      <button data-s="1" class="on" type="button">1×</button><button data-s="2" type="button">2×</button><button data-s="4" type="button">4×</button>
+    <span class="spd" id="pbSpd" role="group" aria-label="Playback speed (multiple of real time)">
+      <button data-s="1" type="button" title="Real time — one second per second">1×</button><button data-s="60" type="button" title="1 minute of driving per second">60×</button><button data-s="300" type="button" title="5 minutes of driving per second">300×</button><button data-s="1200" type="button" title="20 minutes of driving per second">1200×</button>
     </span>
     <span class="rd" id="pbRead"></span>
     <span class="pbnote">Played at the speed actually recorded by the GPS — traffic, stops and motorway are all real, and
-      the clock shows the true time of day. Idle waits between jobs are skipped, and the whole shift is compressed.</span>
+      the clock shows the true time of day. Speeds are true multiples of real time: <b>1× is one second of driving per
+      second</b>, 60× is a minute per second. Idle waits between jobs are skipped.</span>
   </div>
   <div id="map"></div>
 
@@ -71,7 +72,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=28"></script>
+<script src="assets/site.js?v=29"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -140,7 +141,11 @@ function legend() {
 // (hybrid). The order and the speed are real; only the overall length is
 // compressed, and the clock shows the true time of day.
 let pb = null;
-const PB_PLAY_SEC = 35;     // a day's *driving* compresses to ~35s at 1x
+// Speed settings are TRUE multiples of real time: 1x really is one second of
+// driving per second. Shift driving time ranges from under an hour to ten, so
+// the default is the slowest multiple that still plays the day inside a minute
+// - honest label, watchable length.
+const PB_MULTS = [1, 60, 300, 1200];
 const IDLE_SKIP = 60;       // gaps longer than this (real seconds) are skipped
 const pbEls = {};
 
@@ -195,6 +200,13 @@ function pbPosInLeg(leg, lt) {   // interpolate [lat,lng] at lt seconds into the
   return { latlng: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], j, span, a, b };
 }
 function pbProgress() { return pb ? (pb.legs[pb.li].cumDur + pb.lt) / pb.driveSec : 0; }
+function pbDefaultMult(driveSec) {
+  for (const m of PB_MULTS) if (driveSec / m <= 60) return m;
+  return PB_MULTS[PB_MULTS.length - 1];
+}
+function pbSyncMultBtns(m) {
+  document.querySelectorAll('#pbSpd button').forEach(x => x.classList.toggle('on', +x.dataset.s === m));
+}
 function pbAddSeg(leg, i) {      // one laid-down segment, coloured by its speed
   L.polyline([leg.pts[i], leg.pts[i + 1]], {
     color: speedColor(segSpeed(leg, i)), weight: leg.seg === 'trip' ? 4 : 2.5,
@@ -234,11 +246,14 @@ function pbReadout(leg) {
   const n = pb.legs.filter(l => l.seg === 'trip').length;
   pbEls.read.innerHTML = `<b>${hhmm(leg.abs + pb.lt)}</b> · <b>${Math.round(pb.spd)}</b> mph · Trip ${Math.min(done + 1, n)}/${n} · £${gbp.toFixed(2)}`;
 }
-function pbDayIdle(dayKey) {   // idle readout: real driving time + average speed for the day
+function pbDayIdle(dayKey) {   // idle readout: real driving time, average speed, and what play will cost
   const { driveSec, distMi, legs } = dayLegs(dayKey);
   const n = legs.filter(l => l.seg === 'trip').length;
+  const m = pbDefaultMult(driveSec);
+  pbSyncMultBtns(m);
   pbEls.read.innerHTML = `<span style="color:var(--muted)">${n} trips · ${(driveSec / 3600).toFixed(1)} h driving · ` +
-    `${distMi.toFixed(0)} mi · avg <b style="color:var(--ink2)">${Math.round(distMi / (driveSec / 3600))}</b> mph — press play</span>`;
+    `${distMi.toFixed(0)} mi · avg <b style="color:var(--ink2)">${Math.round(distMi / (driveSec / 3600))}</b> mph — ` +
+    `plays in ~${Math.round(driveSec / m)}s at ${m}×</span>`;
 }
 function pbBtnLabel() {
   const day = document.getElementById('daySel').value;
@@ -269,7 +284,7 @@ function pbTick(ts) {
   }
   if (pb.last == null) pb.last = ts;
   const dtms = Math.min(80, ts - pb.last); pb.last = ts;
-  pb.lt += (dtms / 1000) * pb.rate * pb.mult;
+  pb.lt += (dtms / 1000) * pb.mult;      // mult is a true multiple of real time
   while (pb.li < pb.legs.length && pb.lt >= pb.legs[pb.li].dur) {   // crossed one or more leg ends
     pb.lt -= pb.legs[pb.li].dur; pb.li++;
     if (pb.li >= pb.legs.length) {            // end of the day
@@ -291,9 +306,9 @@ function pbInit(dayKey) {
   const { legs, driveSec, distMi } = dayLegs(dayKey);
   if (!legs.length || driveSec < 1) return false;
   if (layer) { layer.remove(); layer = null; }
-  pb = { day: dayKey, legs, driveSec, distMi, li: 0, lt: 0, mult: 1, spd: 0,
-         playing: false, done: false, drawn: 0, segDrawn: 0, last: null, idleUntil: 0,
-         rate: driveSec / PB_PLAY_SEC };
+  pb = { day: dayKey, legs, driveSec, distMi, li: 0, lt: 0, mult: pbDefaultMult(driveSec), spd: 0,
+         playing: false, done: false, drawn: 0, segDrawn: 0, last: null, idleUntil: 0 };
+  pbSyncMultBtns(pb.mult);
   pb.rend = L.canvas({ padding: 0.5 });     // laid-down trail (redrawn only as segments land)
   pb.mrend = L.canvas({ padding: 0.5 });    // live edge + marker (cheap per-frame redraw)
   pb.ghost = L.geoJSON(DATA.days[dayKey], { style: { color: '#94a3b8', weight: 1.5, opacity: .18 }, interactive: false }).addTo(map);
@@ -489,7 +504,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
     isolated = null;
     pbTeardown(false);
     pbEls.seek.value = 0;
-    document.querySelectorAll('#pbSpd button').forEach(x => x.classList.toggle('on', x.dataset.s === '1'));
     syncSpeedBtn();
     pbBtnLabel();
     render(true);
@@ -528,6 +542,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=28"></script>
+<script src="assets/nav.js?v=29"></script>
 </body>
 </html>
