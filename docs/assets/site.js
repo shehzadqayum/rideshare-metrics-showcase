@@ -107,6 +107,13 @@ function dataFail(file) {
 function mapExtras(map) {
   map.scrollWheelZoom.enable();
 
+  // Leaflet leaves inertiaMaxSpeed uncapped, so a quick flick coasts as far as
+  // the release velocity says — on a full-screen map that throws the view
+  // hundreds of miles and reads as the map jumping on its own. Coast distance
+  // is v²/(2·deceleration·easeLinearity) = v²/1360 px, so 600 px/s bounds it to
+  // ~265 px, about a quarter-screen: still fluid, never disorienting.
+  map.options.inertiaMaxSpeed = 600;
+
   const el = map.getContainer();
   const native = el.requestFullscreen || el.webkitRequestFullscreen;
 

@@ -182,6 +182,9 @@ window.addEventListener('load', function () {
     clearInterval(t);
     map.__extras = true;
     map.scrollWheelZoom.enable();
+    // Uncapped by default, so a flick flings a full-screen map across the
+    // country. Coast is v*v/1360 px, so 600 px/s bounds it to ~a quarter screen.
+    map.options.inertiaMaxSpeed = 600;
     var el = map.getContainer();
     var native = el.requestFullscreen || el.webkitRequestFullscreen;
     var nativeOn = function () { return (document.fullscreenElement || document.webkitFullscreenElement) === el; };
