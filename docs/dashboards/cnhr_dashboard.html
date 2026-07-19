@@ -202,14 +202,22 @@ window.addEventListener('load', function () {
     map.on('moveend zoomend', function () {
       if (!frozen) view = { c: map.getCenter(), z: map.getZoom() };
     });
+    // Leaflet's window-resize handler repositions the pane mid-gesture on
+    // machines whose full-screen transition resizes in steps; the drag handler
+    // then teleports back to its stale cached position. Single owner: settle.
+    if (map._onResize) {
+      L.DomEvent.off(window, 'resize', map._onResize, map);
+      L.DomEvent.off(window, 'resize', map._onResize);
+      map.options.trackResize = false;
+    }
+    var held = false, rearm = false;
     var settleTimer = null;
     var settle = function () {
       frozen = true;
       clearTimeout(settleTimer);
       settleTimer = setTimeout(function () {
-        // Never mutate the map mid-drag; wait for the gesture to finish.
-        if (map.dragging && map.dragging.moving()) {
-          map.once('dragend', settle);
+        if (held || (map.dragging && map.dragging.moving())) {
+          rearm = true;               // finish after the hand lifts
           return;
         }
         map.invalidateSize({ pan: false, animate: false });
@@ -217,6 +225,14 @@ window.addEventListener('load', function () {
         frozen = false;
       }, 120);
     };
+    var release = function () {
+      held = false;
+      if (rearm) { rearm = false; settle(); }
+    };
+    el.addEventListener('pointerdown', function () { held = true; }, true);
+    window.addEventListener('pointerup', release, true);
+    window.addEventListener('pointercancel', release, true);
+    window.addEventListener('blur', release);
     var RO = window.ResizeObserver;
     if (RO) new RO(settle).observe(el);
     // No mousedown guard: mutating the map inside mousedown corrupts the drag

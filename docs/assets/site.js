@@ -140,16 +140,30 @@ function mapExtras(map) {
     if (!frozen) view = { c: map.getCenter(), z: map.getZoom() };
   });
 
+  // Leaflet's own window-resize handler repositions the map pane the moment
+  // the window resizes — but its drag handler caches the pane position at
+  // mousedown, so a pane moved between mousedown and the first drag frame
+  // makes the drag teleport back to the stale position. On machines where the
+  // full-screen transition grows the window in steps over several seconds
+  // (observed in the field: 563px to 2499px across ~10s), real gestures land
+  // inside that window and every drag snapped ~350km. All resizing is handled
+  // by the settle below instead, which waits for the hand to lift.
+  if (map._onResize) {
+    L.DomEvent.off(window, 'resize', map._onResize, map);
+    L.DomEvent.off(window, 'resize', map._onResize);
+    map.options.trackResize = false;
+  }
+
+  let held = false, rearm = false;
   let settleTimer = null;
   const settle = () => {
     frozen = true;                    // resize in flight: stop trusting moveend
     clearTimeout(settleTimer);
     settleTimer = setTimeout(() => {
-      // Never mutate the map mid-drag: Leaflet's drag handler caches its start
-      // position at mousedown, and moving the map underneath it corrupts the
-      // whole gesture. Wait for the drag to finish instead.
-      if (map.dragging && map.dragging.moving()) {
-        map.once('dragend', settle);
+      // Nothing may touch the map while a button is down or a drag is live —
+      // that is exactly what teleports the gesture. Finish after release.
+      if (held || (map.dragging && map.dragging.moving())) {
+        rearm = true;
         return;
       }
       map.invalidateSize({ pan: false, animate: false });
@@ -157,6 +171,14 @@ function mapExtras(map) {
       frozen = false;
     }, 120);
   };
+  const release = () => {
+    held = false;
+    if (rearm) { rearm = false; settle(); }
+  };
+  el.addEventListener('pointerdown', () => { held = true; }, true);
+  window.addEventListener('pointerup', release, true);
+  window.addEventListener('pointercancel', release, true);
+  window.addEventListener('blur', release);
   const RO = window.ResizeObserver;
   // ResizeObserver fires per size step, after layout and before user events,
   // so `frozen` is set before any interaction can record a shifted view.
