@@ -60,6 +60,25 @@ svg text { font-family:inherit; }
 @media (max-width:640px){ .fskey .g { grid-template-columns:1fr; } }
 .legend span { display:inline-flex; align-items:center; gap:6px; }
 .sw { width:10px; height:10px; border-radius:3px; display:inline-block; }
+/* Day/week playback bar — the "ghost car" retraces a shift while routes build up. */
+.pbar { display:none; align-items:center; gap:10px; flex-wrap:wrap; margin:4px 0 8px; font-size:.8rem; }
+.pbar.on { display:flex; }
+.pbar .pbtn { font:inherit; font-weight:600; background:var(--s1); color:#fff; border:0; border-radius:8px;
+  padding:9px 15px; cursor:pointer; min-width:104px; }
+.pbar .pbtn:hover { filter:brightness(1.08); }
+.pbar input[type=range] { flex:1 1 200px; min-width:150px; accent-color:var(--s1); height:24px; cursor:pointer; }
+.pbar .spd { display:inline-flex; gap:3px; }
+.pbar .spd button { font:inherit; font-size:.74rem; background:var(--surface); color:var(--ink2);
+  border:1px solid var(--border); border-radius:6px; padding:6px 9px; cursor:pointer; }
+.pbar .spd button.on { border-color:var(--s1); color:var(--s1); font-weight:600; }
+.pbar .rd { color:var(--ink2); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.pbar .rd b { color:var(--ink); }
+.pbar .pbnote { flex-basis:100%; color:var(--muted); font-size:.72rem; margin-top:-2px; }
+@media (max-width:640px) {
+  .pbar .pbtn { min-width:0; flex:1 1 46%; padding:12px 15px; }
+  .pbar .spd button { padding:9px 12px; }
+  .pbar .rd { flex-basis:100%; }
+}
 table { border-collapse:collapse; width:100%; font-size:.8rem; }
 th { text-align:left; color:var(--muted); font-weight:550; padding:6px 10px 6px 0; border-bottom:1px solid var(--grid); }
 td { padding:6px 10px 6px 0; border-bottom:1px solid var(--grid); font-variant-numeric:tabular-nums; }

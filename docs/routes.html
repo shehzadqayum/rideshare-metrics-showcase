@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=23">
+<link rel="stylesheet" href="assets/style.css?v=25">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -39,6 +39,16 @@
     <span id="stats" style="color:var(--muted)"></span>
   </div>
   <div class="legend" id="legend"></div>
+  <div class="pbar" id="pbar">
+    <button class="pbtn" id="pbBtn" type="button">▶ Play day</button>
+    <input type="range" id="pbSeek" min="0" max="1000" value="0" aria-label="Playback position">
+    <span class="spd" id="pbSpd" role="group" aria-label="Playback speed">
+      <button data-s="1" class="on" type="button">1×</button><button data-s="2" type="button">2×</button><button data-s="4" type="button">4×</button>
+    </span>
+    <span class="rd" id="pbRead"></span>
+    <span class="pbnote">Playback is reconstructed and time-compressed — the routes and the order they run in are real GPS;
+      the pacing is illustrative, not the actual clock (per-point timestamps aren't kept).</span>
+  </div>
   <div id="map"></div>
 
   <div class="panel">
@@ -50,13 +60,16 @@
       <li><b>£ per mile</b> — short central London hops often out-earn long motorway runs per mile;
       the gradient makes the good and bad corridors obvious.</li>
       <li><b>Coverage</b> — spanning inner and outer London, airports to suburbs, day and night shifts.</li>
+      <li><b>Play a day</b> — pick a single day above, then <b>▶ Play day</b> to watch that shift retrace
+      itself: a marker leads while the routes build up in order, with a running trip count, earnings and
+      miles. The order is real; the pacing is illustrative.</li>
     </ul>
   </div>
 
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=23"></script>
+<script src="assets/site.js?v=25"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -93,6 +106,140 @@ function legend() {
          <span>£0</span><span>£1</span><span>£2</span><span>£3</span><span>£4+/mi</span></span>
      </span>
      <span><span class="sw" style="background:#8a8a85"></span>en-route/unknown</span>`;
+}
+
+// ---- day playback: a "ghost car" retraces the shift while routes build up ----
+// The trip ids encode per-day order (20260209_001, _003…), so ordering is real;
+// only the pacing is synthetic (GPS per-point times weren't kept). No wall clock
+// is claimed — the readout counts trips and accumulates earnings and miles.
+let pb = null;               // active playback state, or null
+const PB_DUR = 30000;        // a whole day plays in ~30s at 1x, whatever its size
+const pbEls = {};
+
+function hav(a, b) {         // metres between [lat,lng] pairs
+  const R = 6371000, r = Math.PI / 180;
+  const dLa = (b[0] - a[0]) * r, dLo = (b[1] - a[1]) * r;
+  const s = Math.sin(dLa / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLo / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+function dayLegs(dayKey) {
+  const byTrip = {};
+  (DATA.days[dayKey].features || []).forEach(f => {
+    (byTrip[f.properties.trip] = byTrip[f.properties.trip] || {})[f.properties.seg] = f;
+  });
+  const legs = [];
+  Object.keys(byTrip).sort().forEach(id => {          // enroute then paid trip
+    ['enroute', 'trip'].forEach(seg => {
+      const f = byTrip[id][seg];
+      if (!f) return;
+      const pts = f.geometry.coordinates.map(c => [c[1], c[0]]);   // [lon,lat]->[lat,lng]
+      if (pts.length < 2) return;
+      const cum = [0]; let d = 0;
+      for (let i = 1; i < pts.length; i++) { d += hav(pts[i - 1], pts[i]); cum.push(d); }
+      legs.push({ id, seg, props: f.properties, pts, cum, dist: d });
+    });
+  });
+  let off = 0;
+  legs.forEach(l => { l.start = off; off += l.dist; });
+  return { legs, total: off };
+}
+function pbStyle(leg) {
+  const s = styleFor(leg.props);
+  return { color: s.color, weight: leg.seg === 'trip' ? 4 : 2.5,
+    opacity: leg.seg === 'trip' ? .95 : .6, dashArray: leg.seg === 'enroute' ? '5,6' : null };
+}
+function pbPos(D) {
+  const legs = pb.legs;
+  let idx = legs.length - 1;
+  for (let i = 0; i < legs.length; i++) {
+    if (D < legs[i].start + legs[i].dist) { idx = i; break; }
+  }
+  const leg = legs[idx], local = Math.max(0, Math.min(leg.dist, D - leg.start));
+  let j = 0;
+  while (j < leg.cum.length - 2 && leg.cum[j + 1] < local) j++;
+  const segLen = leg.cum[j + 1] - leg.cum[j] || 1, t = (local - leg.cum[j]) / segLen;
+  const a = leg.pts[j], b = leg.pts[j + 1];
+  return { latlng: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], idx, ptIdx: j };
+}
+function pbAdvanceTrail(pos) {
+  while (pb.drawn < pos.idx) {                         // finalise legs fully behind us
+    const leg = pb.legs[pb.drawn];
+    L.polyline(leg.pts, pbStyle(leg)).addTo(pb.trail);
+    pb.drawn++; pb.partial = null;
+  }
+  const leg = pb.legs[pos.idx];
+  const upto = leg.pts.slice(0, pos.ptIdx + 1).concat([pos.latlng]);
+  if (!pb.partial) pb.partial = L.polyline(upto, pbStyle(leg)).addTo(pb.trail);
+  else pb.partial.setLatLngs(upto);
+}
+function pbRender(D) {
+  const pos = pbPos(D);
+  pbAdvanceTrail(pos);
+  const col = pbStyle(pb.legs[pos.idx]).color;
+  pb.marker.setLatLng(pos.latlng); pb.marker.setStyle({ fillColor: col });
+  pb.halo.setLatLng(pos.latlng); pb.halo.setStyle({ fillColor: col });
+  let done = 0, gbp = 0, mi = 0;
+  pb.legs.forEach(l => {
+    if (l.seg === 'trip' && l.start + l.dist <= D + 1) { done++; gbp += l.props.gbp || 0; mi += l.props.mi || 0; }
+  });
+  const n = pb.legs.filter(l => l.seg === 'trip').length;
+  pbEls.read.innerHTML = `Trip <b>${Math.min(done + (pb.done ? 0 : 1), n)}/${n}</b> · £${gbp.toFixed(2)} · ${mi.toFixed(1)} mi`;
+  if (!pb.scrubbing) pbEls.seek.value = Math.round(D / pb.total * 1000);
+}
+function pbBtnLabel() {
+  pbEls.btn.textContent = pb && pb.playing ? '⏸ Pause' : (pb && pb.done ? '↻ Replay' : '▶ Play day');
+}
+function pbTick(ts) {
+  if (!pb || !pb.playing) return;
+  if (pb.last == null) pb.last = ts;
+  const dt = Math.min(80, ts - pb.last); pb.last = ts;
+  pb.D += (pb.total / PB_DUR) * dt * pb.speed;
+  if (pb.D >= pb.total) { pb.D = pb.total; pb.playing = false; pb.done = true; }
+  pbRender(pb.D);
+  if (pb.playing) pb.raf = requestAnimationFrame(pbTick);
+  else pbBtnLabel();
+}
+function pbInit(dayKey) {
+  pbTeardown(false);
+  const { legs, total } = dayLegs(dayKey);
+  if (!legs.length || total < 1) return false;
+  if (layer) { layer.remove(); layer = null; }        // hide the interactive static day
+  pb = { day: dayKey, legs, total, D: 0, speed: 1, playing: false, done: false, drawn: 0, partial: null, last: null };
+  pb.ghost = L.geoJSON(DATA.days[dayKey], { style: { color: '#94a3b8', weight: 1.5, opacity: .18 }, interactive: false }).addTo(map);
+  pb.trail = L.layerGroup().addTo(map);
+  const c0 = pbStyle(legs[0]).color, p0 = pbPos(0).latlng;
+  pb.halo = L.circleMarker(p0, { radius: 13, stroke: false, fillColor: c0, fillOpacity: .22, interactive: false }).addTo(map);
+  pb.marker = L.circleMarker(p0, { radius: 8, color: '#fff', weight: 3, fillColor: c0, fillOpacity: 1 }).addTo(map);
+  try { map.fitBounds(pb.ghost.getBounds(), { padding: [30, 30], maxZoom: 14 }); } catch (e) {}
+  pbRender(0); pbBtnLabel();
+  return true;
+}
+function pbTeardown(restore) {
+  if (pb) {
+    if (pb.raf) cancelAnimationFrame(pb.raf);
+    [pb.ghost, pb.trail, pb.halo, pb.marker].forEach(l => l && map.removeLayer(l));
+    pb = null;
+  }
+  if (restore) render(false);
+}
+function pbPlay() {
+  if (!pb) { if (!pbInit(document.getElementById('daySel').value)) return; }
+  if (pb.done) { pb.trail.clearLayers(); pb.drawn = 0; pb.partial = null; pb.D = 0; pb.done = false; }
+  pb.playing = true; pb.last = null; pbBtnLabel();
+  pb.raf = requestAnimationFrame(pbTick);
+}
+function pbPause() { if (pb) { pb.playing = false; if (pb.raf) cancelAnimationFrame(pb.raf); pbBtnLabel(); } }
+function pbToggle() { pb && pb.playing ? pbPause() : pbPlay(); }
+function pbSeek(frac) {
+  if (!pb && !pbInit(document.getElementById('daySel').value)) return;
+  pb.D = frac * pb.total; pb.done = pb.D >= pb.total;
+  pb.trail.clearLayers(); pb.drawn = 0; pb.partial = null;
+  pbRender(pb.D); pbBtnLabel();
+}
+function pbRestyle() {          // colour-mode changed mid-playback: rebuild the trail
+  if (!pb) return;
+  pb.trail.clearLayers(); pb.drawn = 0; pb.partial = null;
+  pbRender(pb.D);
 }
 
 // fit=true reframes the map. Only a change of data (day) or isolating a single
@@ -182,17 +329,52 @@ getJSON('data/routes.json').then(d => {
   map.on('click', () => {
     if (isolated && Date.now() - lastFeatureClick > 60) { isolated = null; render(false); }
   });
-  sel.addEventListener('change', () => { isolated = null; render(true); });
+  const pbar = document.getElementById('pbar');
+  pbEls.btn = document.getElementById('pbBtn');
+  pbEls.seek = document.getElementById('pbSeek');
+  pbEls.read = document.getElementById('pbRead');
+
+  sel.addEventListener('change', () => {
+    isolated = null;
+    pbTeardown(false);
+    if (sel.value === 'ALL') pbar.classList.remove('on');
+    else {
+      pbar.classList.add('on'); pbEls.seek.value = 0; pbBtnLabel();
+      document.querySelectorAll('#pbSpd button').forEach(x => x.classList.toggle('on', x.dataset.s === '1'));
+    }
+    render(true);
+  });
   document.querySelectorAll('.controls button').forEach(b =>
     b.addEventListener('click', () => {
       document.querySelectorAll('.controls button').forEach(x => x.classList.remove('on'));
       b.classList.add('on');
       mode = b.dataset.mode;
-      render(false);
+      if (pb) { pbRestyle(); legend(); } else render(false);
     }));
+
+  // ---- playback controls ----
+  pbEls.btn.addEventListener('click', pbToggle);
+  pbEls.seek.addEventListener('input', () => {
+    pbPause();
+    if (!pb && !pbInit(sel.value)) return;
+    pb.scrubbing = true; pbSeek(pbEls.seek.value / 1000); pb.scrubbing = false;
+  });
+  document.querySelectorAll('#pbSpd button').forEach(b =>
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#pbSpd button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      if (pb) pb.speed = +b.dataset.s;
+    }));
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && pbar.classList.contains('on') &&
+        !/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName || '')) {
+      e.preventDefault(); pbToggle();
+    }
+  });
+
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=23"></script>
+<script src="assets/nav.js?v=25"></script>
 </body>
 </html>
