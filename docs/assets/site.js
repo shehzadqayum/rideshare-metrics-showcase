@@ -80,6 +80,24 @@ function stateChart(el, rows, legendEl) {
       .map(([k, v]) => `<span><span class="sw" style="background:var(${v})"></span>${k}</span>`).join('');
 }
 
+/* True drawn distance (miles) of a set of route features. The per-trip `mi`
+   property rides on BOTH the en-route and the paid segment of each trip, so
+   summing it double-counts — measure the geometry instead. */
+function trackMiles(features) {
+  const R = 3958.8, r = Math.PI / 180;
+  let mi = 0;
+  (features || []).forEach(f => {
+    const c = f.geometry && f.geometry.coordinates;
+    if (!c) return;
+    for (let i = 1; i < c.length; i++) {
+      const dLa = (c[i][1] - c[i - 1][1]) * r, dLo = (c[i][0] - c[i - 1][0]) * r;
+      const s = Math.sin(dLa / 2) ** 2 + Math.cos(c[i - 1][1] * r) * Math.cos(c[i][1] * r) * Math.sin(dLo / 2) ** 2;
+      mi += 2 * R * Math.asin(Math.sqrt(s));
+    }
+  });
+  return mi;
+}
+
 const getJSON = p => fetch(p).then(r => {
   if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
   return r.json();

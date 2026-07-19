@@ -102,6 +102,7 @@ footer.site { color:var(--muted); font-size:.74rem; margin-top:44px; border-top:
 .controls select, .controls button { font:inherit; background:var(--surface); color:var(--ink);
   border:1px solid var(--border); border-radius:8px; padding:6px 10px; cursor:pointer; }
 .controls button.on { border-color:var(--s1); color:var(--s1); font-weight:600; }
+.controls button:disabled { opacity:.4; cursor:not-allowed; }
 /* z-index:0 traps Leaflet's panes (400) and controls (1000) inside the map so
    they cannot paint over sticky bars as the page scrolls. */
 #map { height:560px; border-radius:10px; border:1px solid var(--border); position:relative; z-index:0; }

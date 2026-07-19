@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=27">
+<link rel="stylesheet" href="assets/style.css?v=28">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -36,6 +36,7 @@
     <button data-mode="seg" class="on">Segment type</button>
     <button data-mode="ppm">£ per mile</button>
     <button data-mode="service">Service</button>
+    <button data-mode="speed">Speed</button>
     <span id="stats" style="color:var(--muted)"></span>
   </div>
   <div class="legend" id="legend"></div>
@@ -70,7 +71,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=27"></script>
+<script src="assets/site.js?v=28"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -84,7 +85,21 @@ const ppmRamp = v => {
   return `hsl(${Math.round(240 * (1 - t))},72%,46%)`;
 };
 
+// Speed heat map — traffic convention: red crawling, amber, green free-flowing.
+// Speed is measured between consecutive GPS points, so it needs the per-point
+// times; that is why this mode is only offered for a single day.
+const SPD_MAX = 55;
+const speedColor = mph => `hsl(${Math.round(Math.max(0, Math.min(1, mph / SPD_MAX)) * 140)},82%,42%)`;
+function segSpeedFrom(aLatLng, bLatLng, dtSec) {
+  return dtSec > 0 ? Math.min(85, hmiles(aLatLng, bLatLng) / (dtSec / 3600)) : 0;
+}
+function featSegSpeed(co, t, i) {   // co = GeoJSON [lon,lat] pairs
+  return segSpeedFrom([co[i][1], co[i][0]], [co[i + 1][1], co[i + 1][0]], t[i + 1] - t[i]);
+}
+const segSpeed = (leg, i) => segSpeedFrom(leg.pts[i], leg.pts[i + 1], leg.t[i + 1] - leg.t[i]);
+
 function styleFor(p) {
+  if (mode === 'speed') return { color: '#8a8a85', weight: p.seg === 'trip' ? 4 : 2.5, opacity: p.seg === 'trip' ? .9 : .5 };
   if (mode === 'seg') return { color: segColor[p.seg] || '#8a8a85', weight: p.seg === 'trip' ? 3 : 2, opacity: p.seg === 'trip' ? .85 : .5 };
   if (mode === 'service') return { color: p.seg === 'trip' ? (svcColor[p.service] || '#8a8a85') : '#8a8a85', weight: p.seg === 'trip' ? 3 : 1.5, opacity: p.seg === 'trip' ? .85 : .3 };
   const ppm = p.seg === 'trip' && p.gbp && p.mi ? p.gbp / p.mi : null;
@@ -99,6 +114,14 @@ function legend() {
      <span><span class="sw" style="background:#e34948"></span>deadhead</span>`;
   else if (mode === 'service') el.innerHTML = Object.entries(svcColor)
     .map(([k, v]) => `<span><span class="sw" style="background:${v}"></span>${k.toLowerCase().replace('_', ' ')}</span>`).join('');
+  else if (mode === 'speed') el.innerHTML =
+    `<span style="display:inline-flex;flex-direction:column;gap:2px">
+       <span style="width:220px;height:12px;border-radius:3px;background:linear-gradient(to right,` +
+         `hsl(0,82%,42%),hsl(35,82%,42%),hsl(70,82%,42%),hsl(105,82%,42%),hsl(140,82%,42%))"></span>
+       <span style="display:flex;justify-content:space-between;width:220px;font-size:.66rem;color:var(--muted)">
+         <span>0</span><span>14</span><span>27</span><span>41</span><span>55+ mph</span></span>
+     </span>
+     <span style="color:var(--muted)">speed measured between GPS points — red is crawling, green free-flowing</span>`;
   else el.innerHTML =
     `<span style="display:inline-flex;flex-direction:column;gap:2px">
        <span style="width:220px;height:12px;border-radius:3px;background:linear-gradient(to right,` +
@@ -172,21 +195,36 @@ function pbPosInLeg(leg, lt) {   // interpolate [lat,lng] at lt seconds into the
   return { latlng: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], j, span, a, b };
 }
 function pbProgress() { return pb ? (pb.legs[pb.li].cumDur + pb.lt) / pb.driveSec : 0; }
+function pbAddSeg(leg, i) {      // one laid-down segment, coloured by its speed
+  L.polyline([leg.pts[i], leg.pts[i + 1]], {
+    color: speedColor(segSpeed(leg, i)), weight: leg.seg === 'trip' ? 4 : 2.5,
+    opacity: leg.seg === 'trip' ? .95 : .55, renderer: pb.rend
+  }).addTo(pb.trail);
+}
+function pbDrawLegFull(leg) {
+  if (mode === 'speed') { for (let i = 0; i < leg.pts.length - 1; i++) pbAddSeg(leg, i); }
+  else L.polyline(leg.pts, pbStyle(leg)).addTo(pb.trail);
+}
 function pbFrameRender() {
   const leg = pb.legs[pb.li], pos = pbPosInLeg(leg, pb.lt);
-  while (pb.drawn < pb.li) {                              // finalise completed legs
-    const L2 = pb.legs[pb.drawn]; L.polyline(L2.pts, pbStyle(L2)).addTo(pb.trail);
-    pb.drawn++; pb.partial = null;
+  while (pb.drawn < pb.li) {                       // finalise completed legs
+    pbDrawLegFull(pb.legs[pb.drawn]); pb.drawn++; pb.segDrawn = 0;
   }
-  const upto = leg.pts.slice(0, pos.j + 1).concat([pos.latlng]);
-  if (!pb.partial) pb.partial = L.polyline(upto, pbStyle(leg)).addTo(pb.trail);
-  else pb.partial.setLatLngs(upto);
-  const col = pbStyle(leg).color;
+  // the live edge rides on its own canvas so a per-frame update doesn't force
+  // the whole laid-down trail to redraw
+  if (mode === 'speed') {
+    while (pb.segDrawn < pos.j) { pbAddSeg(leg, pb.segDrawn); pb.segDrawn++; }
+    pb.partial.setLatLngs([leg.pts[pos.j], pos.latlng]);
+    pb.partial.setStyle({ color: speedColor(segSpeed(leg, pos.j)), weight: leg.seg === 'trip' ? 4 : 2.5, opacity: .95 });
+  } else {
+    pb.partial.setLatLngs(leg.pts.slice(0, pos.j + 1).concat([pos.latlng]));
+    pb.partial.setStyle(pbStyle(leg));
+  }
+  const inst = segSpeedFrom(pos.a, pos.b, pos.span);   // clamped inside
+  pb.spd = pb.spd * 0.72 + inst * 0.28;
+  const col = mode === 'speed' ? speedColor(inst) : pbStyle(leg).color;
   pb.marker.setLatLng(pos.latlng); pb.marker.setStyle({ fillColor: col });
   pb.halo.setLatLng(pos.latlng); pb.halo.setStyle({ fillColor: col });
-  // instantaneous speed, clamped for GPS glitches and smoothed
-  const inst = Math.min(85, hmiles(pos.a, pos.b) / (pos.span / 3600));
-  pb.spd = pb.spd * 0.72 + inst * 0.28;
   pbReadout(leg);
   if (!pb.scrubbing) pbEls.seek.value = Math.round(pbProgress() * 1000);
 }
@@ -233,15 +271,13 @@ function pbTick(ts) {
   const dtms = Math.min(80, ts - pb.last); pb.last = ts;
   pb.lt += (dtms / 1000) * pb.rate * pb.mult;
   while (pb.li < pb.legs.length && pb.lt >= pb.legs[pb.li].dur) {   // crossed one or more leg ends
-    const fin = pb.legs[pb.li];
-    while (pb.drawn <= pb.li) { const L2 = pb.legs[pb.drawn]; L.polyline(L2.pts, pbStyle(L2)).addTo(pb.trail); pb.drawn++; }
-    pb.partial = null;
-    pb.lt -= fin.dur; pb.li++;
+    pb.lt -= pb.legs[pb.li].dur; pb.li++;
     if (pb.li >= pb.legs.length) {            // end of the day
       pb.li = pb.legs.length - 1; pb.lt = pb.legs[pb.li].dur; pb.playing = false; pb.done = true;
       pbFrameRender(); pbBtnLabel(); return;
     }
     if (pb.legs[pb.li].gap > 0) {             // hybrid: skip the wait, flash it, jump the car
+      pbFrameRender();                        // lay down the leg just finished
       pb.idleUntil = ts + 1200; pb.last = null;
       pb.marker.setLatLng(pb.legs[pb.li].pts[0]); pb.halo.setLatLng(pb.legs[pb.li].pts[0]);
       pbFlashIdle(pb.legs[pb.li].gap); pb.raf = requestAnimationFrame(pbTick); return;
@@ -256,13 +292,16 @@ function pbInit(dayKey) {
   if (!legs.length || driveSec < 1) return false;
   if (layer) { layer.remove(); layer = null; }
   pb = { day: dayKey, legs, driveSec, distMi, li: 0, lt: 0, mult: 1, spd: 0,
-         playing: false, done: false, drawn: 0, partial: null, last: null, idleUntil: 0,
+         playing: false, done: false, drawn: 0, segDrawn: 0, last: null, idleUntil: 0,
          rate: driveSec / PB_PLAY_SEC };
+  pb.rend = L.canvas({ padding: 0.5 });     // laid-down trail (redrawn only as segments land)
+  pb.mrend = L.canvas({ padding: 0.5 });    // live edge + marker (cheap per-frame redraw)
   pb.ghost = L.geoJSON(DATA.days[dayKey], { style: { color: '#94a3b8', weight: 1.5, opacity: .18 }, interactive: false }).addTo(map);
   pb.trail = L.layerGroup().addTo(map);
-  const c0 = pbStyle(legs[0]).color, p0 = legs[0].pts[0];
-  pb.halo = L.circleMarker(p0, { radius: 13, stroke: false, fillColor: c0, fillOpacity: .22, interactive: false }).addTo(map);
-  pb.marker = L.circleMarker(p0, { radius: 8, color: '#fff', weight: 3, fillColor: c0, fillOpacity: 1 }).addTo(map);
+  const c0 = mode === 'speed' ? speedColor(segSpeed(legs[0], 0)) : pbStyle(legs[0]).color, p0 = legs[0].pts[0];
+  pb.partial = L.polyline([p0, p0], { color: c0, weight: 4, opacity: .95, renderer: pb.mrend }).addTo(map);
+  pb.halo = L.circleMarker(p0, { radius: 13, stroke: false, fillColor: c0, fillOpacity: .22, interactive: false, renderer: pb.mrend }).addTo(map);
+  pb.marker = L.circleMarker(p0, { radius: 8, color: '#fff', weight: 3, fillColor: c0, fillOpacity: 1, renderer: pb.mrend }).addTo(map);
   try { map.fitBounds(pb.ghost.getBounds(), { padding: [30, 30], maxZoom: 14 }); } catch (e) {}
   pbFrameRender(); pbBtnLabel();
   return true;
@@ -270,14 +309,22 @@ function pbInit(dayKey) {
 function pbTeardown(restore) {
   if (pb) {
     if (pb.raf) cancelAnimationFrame(pb.raf);
-    [pb.ghost, pb.trail, pb.halo, pb.marker].forEach(l => l && map.removeLayer(l));
+    [pb.ghost, pb.trail, pb.partial, pb.halo, pb.marker].forEach(l => l && map.removeLayer(l));
     pb = null;
   }
   if (restore) render(false);
 }
-function pbReset() { pb.trail.clearLayers(); pb.drawn = 0; pb.partial = null; pb.li = 0; pb.lt = 0; pb.spd = 0; pb.done = false; pb.idleUntil = 0; }
+function pbReset() { pb.trail.clearLayers(); pb.drawn = 0; pb.segDrawn = 0; pb.li = 0; pb.lt = 0; pb.spd = 0; pb.done = false; pb.idleUntil = 0; }
+function setColourMode(m) {      // set mode + button state + legend, without re-rendering
+  mode = m;
+  document.querySelectorAll('.controls button[data-mode]').forEach(x => x.classList.toggle('on', x.dataset.mode === m));
+  legend();
+}
 function pbPlay() {
-  if (!pb) { if (!pbInit(document.getElementById('daySel').value)) return; }
+  if (!pb) {
+    setColourMode('speed');     // playback defaults to the speed heat map
+    if (!pbInit(document.getElementById('daySel').value)) return;
+  }
   if (pb.done) pbReset();
   pb.playing = true; pb.last = null; pbBtnLabel();
   pb.raf = requestAnimationFrame(pbTick);
@@ -295,13 +342,43 @@ function pbSeek(frac) {
   let li = 0; while (li < pb.legs.length - 1 && pb.legs[li].cumDur + pb.legs[li].dur <= target) li++;
   pb.li = li; pb.lt = Math.max(0, Math.min(pb.legs[li].dur, target - pb.legs[li].cumDur));
   pb.done = frac >= 1; pb.idleUntil = 0;
-  pb.trail.clearLayers(); pb.drawn = 0; pb.partial = null;
+  pb.trail.clearLayers(); pb.drawn = 0; pb.segDrawn = 0;
   pbFrameRender(); pbBtnLabel();
 }
 function pbRestyle() {          // colour-mode changed mid-playback: rebuild the trail
   if (!pb) return;
-  pb.trail.clearLayers(); pb.drawn = 0; pb.partial = null;
+  pb.trail.clearLayers(); pb.drawn = 0; pb.segDrawn = 0;
   pbFrameRender();
+}
+
+// One polyline per point-to-point segment, coloured by the speed actually
+// driven over it. Canvas-rendered: a day is a few thousand segments and SVG
+// would crawl. Offered for a single day only (see the day handler).
+function buildSpeedLayer(feats) {
+  const rend = L.canvas({ padding: 0.5 });
+  const g = L.featureGroup();
+  feats.forEach(f => {
+    const p = f.properties, co = f.geometry.coordinates, t = p.t;
+    if (!t || t.length !== co.length) return;
+    for (let i = 0; i < co.length - 1; i++) {
+      const mph = featSegSpeed(co, t, i);
+      const pl = L.polyline([[co[i][1], co[i][0]], [co[i + 1][1], co[i + 1][0]]], {
+        color: speedColor(mph), weight: p.seg === 'trip' ? 4 : 2.5,
+        opacity: p.seg === 'trip' ? .9 : .5, renderer: rend
+      });
+      pl.bindTooltip(`<b>${Math.round(mph)} mph</b> here · ${p.seg}<br>${p.from || '?'} → ${p.to || '?'}<br>` +
+        `trip average ${p.mph ?? '?'} mph · ${p.mi ?? '?'} mi`, { sticky: true });
+      pl.on('click', e => {
+        L.DomEvent.stopPropagation(e);
+        lastFeatureClick = Date.now();
+        const isolating = isolated !== p.trip;
+        isolated = isolating ? p.trip : null;
+        render(isolating);
+      });
+      g.addLayer(pl);
+    }
+  });
+  return g;
 }
 
 // fit=true reframes the map. Only a change of data (day) or isolating a single
@@ -319,7 +396,9 @@ function render(fit) {
     if (iso.length) feats = iso; else isolated = null;
   }
   if (layer) layer.remove();
-  layer = L.geoJSON({ type: 'FeatureCollection', features: feats }, {
+  // speed mode colours each point-to-point segment, so it can't use one style
+  // per feature — it builds its own canvas-rendered layer instead.
+  layer = mode === 'speed' ? buildSpeedLayer(feats) : L.geoJSON({ type: 'FeatureCollection', features: feats }, {
     style: f => styleFor(f.properties),
     onEachFeature: (f, l) => {
       const p = f.properties;
@@ -336,7 +415,8 @@ function render(fit) {
         render(isolating);
       });
     }
-  }).addTo(map);
+  });
+  layer.addTo(map);
   if (fit && feats.length) map.fitBounds(layer.getBounds(), { padding: [30, 30], maxZoom: isolated ? 15 : 13 });
   const stats = document.getElementById('stats');
   if (isolated) {
@@ -348,7 +428,7 @@ function render(fit) {
       ` &nbsp;<span style="color:var(--s1)">click empty map to show all</span>`;
   } else {
     const trips = new Set(feats.filter(f => f.properties.seg === 'trip').map(f => f.properties.trip)).size;
-    const mi = feats.reduce((a, f) => a + (f.properties.mi || 0), 0);
+    const mi = trackMiles(feats);           // measured geometry, not the double-counted mi property
     const gbp = feats.filter(f => f.properties.seg === 'trip').reduce((a, f) => a + (f.properties.gbp || 0), 0);
     stats.textContent = `${trips} trips · ${fmt(mi)} mi tracked · £${fmt(gbp)} · click a route to isolate it`;
   }
@@ -396,11 +476,21 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   pbEls.seek = document.getElementById('pbSeek');
   pbEls.read = document.getElementById('pbRead');
 
+  // Speed colouring is per-segment; across all 31 days that is ~27k segments,
+  // so it is offered for a single day only.
+  function syncSpeedBtn() {
+    const b = document.querySelector('.controls button[data-mode="speed"]');
+    const isAll = sel.value === 'ALL';
+    b.disabled = isAll;
+    b.title = isAll ? 'Pick a single day to colour by speed' : 'Colour each segment by the speed actually driven';
+    if (isAll && mode === 'speed') setColourMode('seg');
+  }
   sel.addEventListener('change', () => {
     isolated = null;
     pbTeardown(false);
     pbEls.seek.value = 0;
     document.querySelectorAll('#pbSpd button').forEach(x => x.classList.toggle('on', x.dataset.s === '1'));
+    syncSpeedBtn();
     pbBtnLabel();
     render(true);
   });
@@ -433,10 +523,11 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   });
 
   pbar.classList.add('on');   // the play bar is always visible; Play picks a day when on "All days"
+  syncSpeedBtn();
   pbBtnLabel();
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=27"></script>
+<script src="assets/nav.js?v=28"></script>
 </body>
 </html>
