@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=10">
+<link rel="stylesheet" href="assets/style.css?v=11">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -56,7 +56,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=10"></script>
+<script src="assets/site.js?v=11"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -95,7 +95,11 @@ function legend() {
      <span><span class="sw" style="background:#8a8a85"></span>en-route/unknown</span>`;
 }
 
-function render() {
+// fit=true reframes the map. Only a change of data (day) or isolating a single
+// trip should do that; recolouring or clearing an isolation must leave the
+// viewer exactly where they were - doubly so in full screen, where an
+// unexpected refit reads as the map jumping somewhere random.
+function render(fit) {
   const day = document.getElementById('daySel').value;
   let feats = day === 'ALL'
     ? Object.values(DATA.days).flatMap(d => d.features)
@@ -118,12 +122,13 @@ function render() {
       l.on('click', e => {
         L.DomEvent.stopPropagation(e);
         lastFeatureClick = Date.now();
-        isolated = (isolated === p.trip) ? null : p.trip;
-        render();
+        const isolating = isolated !== p.trip;
+        isolated = isolating ? p.trip : null;
+        render(isolating);
       });
     }
   }).addTo(map);
-  if (feats.length) map.fitBounds(layer.getBounds(), { padding: [30, 30], maxZoom: isolated ? 15 : 13 });
+  if (fit && feats.length) map.fitBounds(layer.getBounds(), { padding: [30, 30], maxZoom: isolated ? 15 : 13 });
   const stats = document.getElementById('stats');
   if (isolated) {
     const t = feats.find(f => f.properties.seg === 'trip') || feats[0];
@@ -175,19 +180,19 @@ getJSON('data/routes.json').then(d => {
     { attribution: '© OpenStreetMap, © CARTO', maxZoom: 19 }).addTo(map);
   // click empty map to clear an isolated trip (ignore the click that did the isolating)
   map.on('click', () => {
-    if (isolated && Date.now() - lastFeatureClick > 60) { isolated = null; render(); }
+    if (isolated && Date.now() - lastFeatureClick > 60) { isolated = null; render(false); }
   });
-  sel.addEventListener('change', () => { isolated = null; render(); });
+  sel.addEventListener('change', () => { isolated = null; render(true); });
   document.querySelectorAll('.controls button').forEach(b =>
     b.addEventListener('click', () => {
       document.querySelectorAll('.controls button').forEach(x => x.classList.remove('on'));
       b.classList.add('on');
       mode = b.dataset.mode;
-      render();
+      render(false);
     }));
-  render();
+  render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=10"></script>
+<script src="assets/nav.js?v=11"></script>
 </body>
 </html>

@@ -118,7 +118,15 @@ function mapExtras(map) {
   const maxiOn = () => el.classList.contains('rs-maxi');
   const isFull = () => nativeOn() || maxiOn();
 
-  const resize = () => setTimeout(() => map.invalidateSize(), 60);
+  // Leaflet's invalidateSize keeps the top-left corner anchored, so growing the
+  // container to full screen drags the centre south-east — London ends up in
+  // France. Remember where the viewer was looking and restore it afterwards.
+  let pending = null;
+  const remember = () => { pending = { c: map.getCenter(), z: map.getZoom() }; };
+  const resize = () => setTimeout(() => {
+    map.invalidateSize({ pan: false, animate: false });
+    if (pending) { map.setView(pending.c, pending.z, { animate: false }); pending = null; }
+  }, 80);
   const setMaxi = on => { el.classList.toggle('rs-maxi', on); label(); resize(); };
 
   let label = () => {};
@@ -138,6 +146,7 @@ function mapExtras(map) {
       label();
       L.DomEvent.on(a, 'click', e => {
         L.DomEvent.stop(e);
+        remember();                       // hold the view across the resize
         if (isFull()) {
           if (nativeOn()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
           else setMaxi(false);

@@ -90,7 +90,16 @@ window.addEventListener('load', function () {
     var maxiOn = function () { return el.classList.contains('rs-maxi'); };
     var isFull = function () { return nativeOn() || maxiOn(); };
     var label = function () {};
-    var resize = function () { setTimeout(function () { map.invalidateSize(); }, 60); };
+    // invalidateSize anchors the top-left, so growing to full screen drags the
+    // centre away; hold the viewer's position across the resize.
+    var pending = null;
+    var remember = function () { pending = { c: map.getCenter(), z: map.getZoom() }; };
+    var resize = function () {
+      setTimeout(function () {
+        map.invalidateSize({ pan: false, animate: false });
+        if (pending) { map.setView(pending.c, pending.z, { animate: false }); pending = null; }
+      }, 80);
+    };
     var setMaxi = function (on) { el.classList.toggle('rs-maxi', on); label(); resize(); };
     var Ctl = L.Control.extend({
       options: { position: 'topleft' },
@@ -106,6 +115,7 @@ window.addEventListener('load', function () {
         label();
         L.DomEvent.on(a, 'click', function (e) {
           L.DomEvent.stop(e);
+          remember();
           if (isFull()) {
             if (nativeOn()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
             else setMaxi(false);
