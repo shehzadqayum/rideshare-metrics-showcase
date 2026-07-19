@@ -125,50 +125,44 @@ function mapExtras(map) {
   const maxiOn = () => el.classList.contains('rs-maxi');
   const isFull = () => nativeOn() || maxiOn();
 
-  // A resize must never move the geographic view — but the container's size
-  // can arrive in one step (pinned mode) or several (native full screen's
-  // animated transition, which also races Leaflet's own window-resize
-  // handler). Any scheme that compensates a single step, or restores a
-  // remembered view exactly once, shifts the view on the steps it misses —
-  // which is precisely how full screen kept relocating London to France.
-  // The only ordering-independent approach: track the intended view
-  // continuously, freeze tracking the moment a resize begins, and re-assert
-  // the view after every settlement.
-  let view = { c: map.getCenter(), z: map.getZoom() };
-  let frozen = false;
-  map.on('moveend zoomend', () => {
-    if (!frozen) view = { c: map.getCenter(), z: map.getZoom() };
-  });
-
-  // Leaflet's own window-resize handler repositions the map pane the moment
-  // the window resizes — but its drag handler caches the pane position at
-  // mousedown, so a pane moved between mousedown and the first drag frame
-  // makes the drag teleport back to the stale position. On machines where the
-  // full-screen transition grows the window in steps over several seconds
-  // (observed in the field: 563px to 2499px across ~10s), real gestures land
-  // inside that window and every drag snapped ~350km. All resizing is handled
-  // by the settle below instead, which waits for the hand to lift.
+  // --- resize handling -------------------------------------------------------
+  // Two invariants, learned the hard way:
+  //  1. Nothing may touch the map while the button is down or a drag is live.
+  //     Leaflet caches the pane position at mousedown, so any reposition
+  //     before the first drag frame teleports the gesture.
+  //  2. Nothing is remembered across time. Every settle derives its anchor
+  //     from the map's current state, so a user gesture can never be undone
+  //     by a stale record of where the map "should" be.
+  // Leaflet's own window-resize handler violates (1) on machines whose
+  // full-screen transition resizes in steps over seconds, so it is disarmed;
+  // the settle below is the single owner of resize handling.
   if (map._onResize) {
     L.DomEvent.off(window, 'resize', map._onResize, map);
     L.DomEvent.off(window, 'resize', map._onResize);
     map.options.trackResize = false;
   }
 
-  let held = false, rearm = false;
+  let held = false, rearm = false, dragged = false;
+  map.on('dragend', () => { dragged = true; });
+
   let settleTimer = null;
   const settle = () => {
-    frozen = true;                    // resize in flight: stop trusting moveend
     clearTimeout(settleTimer);
     settleTimer = setTimeout(() => {
-      // Nothing may touch the map while a button is down or a drag is live —
-      // that is exactly what teleports the gesture. Finish after release.
-      if (held || (map.dragging && map.dragging.moving())) {
-        rearm = true;
-        return;
-      }
+      if (held || (map.dragging && map.dragging.moving())) { rearm = true; return; }
+      const z = map.getZoom();
+      // Anchor before syncing. After a plain resize, getCenter() still
+      // reflects the size the user last stably saw, so re-centring it
+      // preserves their framing. After a drag, their framing is whatever
+      // sits at the visual centre of the real box (computed independently
+      // of the stale size cache), so a drag made mid-transition survives
+      // instead of being snapped back.
+      const keep = dragged
+        ? map.containerPointToLatLng(L.point(el.clientWidth / 2, el.clientHeight / 2))
+        : map.getCenter();
+      dragged = false;
       map.invalidateSize({ pan: false, animate: false });
-      map.setView(view.c, view.z, { animate: false });
-      frozen = false;
+      map.setView(keep, z, { animate: false });
     }, 120);
   };
   const release = () => {
@@ -180,8 +174,7 @@ function mapExtras(map) {
   window.addEventListener('pointercancel', release, true);
   window.addEventListener('blur', release);
   const RO = window.ResizeObserver;
-  // ResizeObserver fires per size step, after layout and before user events,
-  // so `frozen` is set before any interaction can record a shifted view.
+  // One settle per burst of size steps: each call re-arms the same timer.
   if (RO) new RO(settle).observe(el);
 
   // Deliberately NO mousedown "guard" here. An earlier version re-synced the

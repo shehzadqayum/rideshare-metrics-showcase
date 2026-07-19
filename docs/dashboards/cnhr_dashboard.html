@@ -197,32 +197,31 @@ window.addEventListener('load', function () {
     // shifts the view on the steps it misses. Track the intended view
     // continuously, freeze tracking while a resize is in flight, and re-assert
     // the view after every settlement.
-    var view = { c: map.getCenter(), z: map.getZoom() };
-    var frozen = false;
-    map.on('moveend zoomend', function () {
-      if (!frozen) view = { c: map.getCenter(), z: map.getZoom() };
-    });
-    // Leaflet's window-resize handler repositions the pane mid-gesture on
-    // machines whose full-screen transition resizes in steps; the drag handler
-    // then teleports back to its stale cached position. Single owner: settle.
+    // Two invariants: never touch the map while the button is down or a drag
+    // is live (Leaflet caches the pane position at mousedown - repositioning
+    // it teleports the gesture), and remember nothing across time (a stale
+    // record of where the map "should" be undoes user gestures). Leaflet's
+    // window-resize handler violates the first on machines whose full-screen
+    // transition resizes in steps, so the settle below is the single owner.
     if (map._onResize) {
       L.DomEvent.off(window, 'resize', map._onResize, map);
       L.DomEvent.off(window, 'resize', map._onResize);
       map.options.trackResize = false;
     }
-    var held = false, rearm = false;
+    var held = false, rearm = false, dragged = false;
+    map.on('dragend', function () { dragged = true; });
     var settleTimer = null;
     var settle = function () {
-      frozen = true;
       clearTimeout(settleTimer);
       settleTimer = setTimeout(function () {
-        if (held || (map.dragging && map.dragging.moving())) {
-          rearm = true;               // finish after the hand lifts
-          return;
-        }
+        if (held || (map.dragging && map.dragging.moving())) { rearm = true; return; }
+        var z = map.getZoom();
+        var keep = dragged
+          ? map.containerPointToLatLng(L.point(el.clientWidth / 2, el.clientHeight / 2))
+          : map.getCenter();
+        dragged = false;
         map.invalidateSize({ pan: false, animate: false });
-        map.setView(view.c, view.z, { animate: false });
-        frozen = false;
+        map.setView(keep, z, { animate: false });
       }, 120);
     };
     var release = function () {
