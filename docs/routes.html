@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=25">
+<link rel="stylesheet" href="assets/style.css?v=26">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -60,16 +60,16 @@
       <li><b>£ per mile</b> — short central London hops often out-earn long motorway runs per mile;
       the gradient makes the good and bad corridors obvious.</li>
       <li><b>Coverage</b> — spanning inner and outer London, airports to suburbs, day and night shifts.</li>
-      <li><b>Play a day</b> — pick a single day above, then <b>▶ Play day</b> to watch that shift retrace
-      itself: a marker leads while the routes build up in order, with a running trip count, earnings and
-      miles. The order is real; the pacing is illustrative.</li>
+      <li><b>Play a day</b> — press <b>▶ Play a day</b> below the map (or pick a specific day first) to watch
+      that shift retrace itself: a marker leads while the routes build up in order, with a running trip count,
+      earnings and miles. The order is real; the pacing is illustrative.</li>
     </ul>
   </div>
 
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=25"></script>
+<script src="assets/site.js?v=26"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -187,7 +187,19 @@ function pbRender(D) {
   if (!pb.scrubbing) pbEls.seek.value = Math.round(D / pb.total * 1000);
 }
 function pbBtnLabel() {
-  pbEls.btn.textContent = pb && pb.playing ? '⏸ Pause' : (pb && pb.done ? '↻ Replay' : '▶ Play day');
+  const day = document.getElementById('daySel').value;
+  pbEls.btn.textContent = pb && pb.playing ? '⏸ Pause'
+    : pb && pb.done ? '↻ Replay'
+    : (day === 'ALL' ? '▶ Play a day' : '▶ Play day');
+  if (!pb) pbEls.read.innerHTML = '<span style="color:var(--muted)">watch a shift retrace itself — routes build up in order</span>';
+}
+function pbPickDay() {         // the richest day makes the best showcase
+  let best = null, bn = -1;
+  Object.keys(DATA.days).forEach(k => {
+    const n = new Set(DATA.days[k].features.map(f => f.properties.trip)).size;
+    if (n > bn) { bn = n; best = k; }
+  });
+  return best;
 }
 function pbTick(ts) {
   if (!pb || !pb.playing) return;
@@ -229,7 +241,12 @@ function pbPlay() {
   pb.raf = requestAnimationFrame(pbTick);
 }
 function pbPause() { if (pb) { pb.playing = false; if (pb.raf) cancelAnimationFrame(pb.raf); pbBtnLabel(); } }
-function pbToggle() { pb && pb.playing ? pbPause() : pbPlay(); }
+function pbToggle() {
+  if (pb) { pb.playing ? pbPause() : pbPlay(); return; }
+  const sel = document.getElementById('daySel');
+  if (sel.value === 'ALL') { sel.value = pbPickDay(); sel.dispatchEvent(new Event('change')); }  // pick a day to show
+  pbPlay();
+}
 function pbSeek(frac) {
   if (!pb && !pbInit(document.getElementById('daySel').value)) return;
   pb.D = frac * pb.total; pb.done = pb.D >= pb.total;
@@ -337,11 +354,9 @@ getJSON('data/routes.json').then(d => {
   sel.addEventListener('change', () => {
     isolated = null;
     pbTeardown(false);
-    if (sel.value === 'ALL') pbar.classList.remove('on');
-    else {
-      pbar.classList.add('on'); pbEls.seek.value = 0; pbBtnLabel();
-      document.querySelectorAll('#pbSpd button').forEach(x => x.classList.toggle('on', x.dataset.s === '1'));
-    }
+    pbEls.seek.value = 0;
+    document.querySelectorAll('#pbSpd button').forEach(x => x.classList.toggle('on', x.dataset.s === '1'));
+    pbBtnLabel();
     render(true);
   });
   document.querySelectorAll('.controls button').forEach(b =>
@@ -372,9 +387,11 @@ getJSON('data/routes.json').then(d => {
     }
   });
 
+  pbar.classList.add('on');   // the play bar is always visible; Play picks a day when on "All days"
+  pbBtnLabel();
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=25"></script>
+<script src="assets/nav.js?v=26"></script>
 </body>
 </html>
