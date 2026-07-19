@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=31">
+<link rel="stylesheet" href="assets/style.css?v=32">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -68,16 +68,18 @@
       shift retrace itself at the real recorded speed: the car crawls in traffic and flies on the motorway, a
       live speedometer and the true time-of-day clock run alongside the trip count and earnings, and the idle
       waits between jobs are skipped.</li>
-      <li><b>Full screen</b> — the ⛶ button top-left fills the screen, and the player, legend and colour
-      controls come with it: the play bar sits across the foot and the layers panel top-right, with a
-      day stepper in place of the dropdown. On a phone the layers panel collapses behind a single button.</li>
+      <li><b>Full screen</b> — the ⛶ button top-left fills the screen and every control comes with it,
+      as one instrument cluster: day navigation and the player across the foot (the day label opens a
+      picker for all 31 days), the colour modes folding up out of that bar behind <b>⚙ Layers</b>, the
+      legend pinned top-right so it stays readable while a day plays, and a live speedometer bottom-left
+      showing current speed, the average since the shift began, and the true date and time.</li>
     </ul>
   </div>
 
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=31"></script>
+<script src="assets/site.js?v=32"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -145,7 +147,7 @@ function legend() {
 // lights. Idle waits between jobs are skipped with a "waited N min" flash
 // (hybrid). The order and the speed are real; only the overall length is
 // compressed, and the clock shows the true time of day.
-let pb = null;
+let pb = null, userMult = null;   // userMult: a speed the viewer chose, kept across days
 // Speed settings are TRUE multiples of real time: 1x really is one second of
 // driving per second. Shift driving time ranges from under an hour to ten, so
 // the default is the slowest multiple that still plays the day inside a minute
@@ -162,6 +164,79 @@ function hav(a, b) {        // metres between [lat,lng]
 }
 const hmiles = (a, b) => hav(a, b) / 1609.34;
 const hhmm = sec => { sec = ((sec % 86400) + 86400) % 86400; const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); };
+const MONS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+// absSec is midnight-unwrapped, so a shift running past midnight rolls the date
+// with it — new Date() normalises the overflowing day-of-month for us.
+function dayDate(key, absSec) {
+  const d = new Date(+key.slice(0, 4), +key.slice(4, 6) - 1,
+                     +key.slice(6, 8) + Math.floor(absSec / 86400));
+  return `${DOW[d.getDay()]} ${d.getDate()} ${MONS[d.getMonth()]}`;
+}
+
+// ---- speedometer ----
+// A direct child of the map container rather than an adopted node: it then
+// works identically windowed and full screen, holds nothing focusable (so the
+// adopt() focus dance never applies), and pointer-events:none in the CSS lets
+// every drag pass straight through to the map.
+// The dial is decoration; the numerals carry the reading. The speed heat ramp
+// measures under 2.3:1 against this light panel above ~17 mph, so colour alone
+// could never be the meaning-carrier here.
+const GAUGE_MAX = 80;                       // segment speeds are clamped at 85
+const gaugeAngle = mph => -120 + 240 * Math.max(0, Math.min(1, mph / GAUGE_MAX));
+let gauge = null;
+
+function pbGaugeBuild(mapEl) {
+  const box = document.createElement('div');
+  box.className = 'rs-gauge';
+  box.setAttribute('aria-hidden', 'true');  // #pbRead already announces all of this
+  let ticks = '';
+  for (let v = 0; v <= GAUGE_MAX; v += 10) {
+    const a = gaugeAngle(v) * Math.PI / 180, s = Math.sin(a), c = Math.cos(a);
+    const major = v % 40 === 0, r1 = major ? 29 : 32.5;
+    ticks += `<line x1="${(60 + s * r1).toFixed(1)}" y1="${(56 - c * r1).toFixed(1)}"` +
+             ` x2="${(60 + s * 35.5).toFixed(1)}" y2="${(56 - c * 35.5).toFixed(1)}"` +
+             ` stroke="#8b949c" stroke-width="${major ? 1.4 : .8}"/>`;
+    if (major) ticks += `<text class="tick" x="${(60 + s * 21).toFixed(1)}"` +
+             ` y="${(56 - c * 21 + 2).toFixed(1)}" text-anchor="middle">${v}</text>`;
+  }
+  box.innerHTML =
+    `<svg viewBox="0 0 120 80" role="img" aria-label="Speedometer">
+       <path d="M25.4 76 A40 40 0 1 1 94.6 76" fill="none" stroke="#ddd6ca"
+             stroke-width="7" stroke-linecap="round"/>
+       <path class="arc" d="M25.4 76 A40 40 0 1 1 94.6 76" fill="none" stroke="#15803d"
+             stroke-width="7" stroke-linecap="round" pathLength="1" stroke-dasharray="0 1"/>
+       ${ticks}
+       <g class="ndl" transform="rotate(-120 60 56)">
+         <line x1="60" y1="56" x2="60" y2="26" stroke="#16202a" stroke-width="2.2" stroke-linecap="round"/>
+       </g>
+       <circle cx="60" cy="56" r="3.4" fill="#16202a"/>
+     </svg>
+     <div style="text-align:center;margin-top:-4px">
+       <span class="mph">0</span>
+       <span style="font-size:.62rem;font-weight:600;letter-spacing:.08em;color:#545f68">MPH</span>
+     </div>
+     <div class="rows">
+       <div><span>avg<span class="lg"> from start</span></span><b class="avg">—</b></div>
+       <div><span class="date">—</span><b class="time">—:—</b></div>
+     </div>`;
+  mapEl.appendChild(box);
+  return { box, arc: box.querySelector('.arc'), ndl: box.querySelector('.ndl'),
+           mph: box.querySelector('.mph'), avg: box.querySelector('.avg'),
+           date: box.querySelector('.date'), time: box.querySelector('.time') };
+}
+
+function pbGaugeUpdate(mph, avgMph, absSec) {
+  if (!gauge || !pb) return;
+  const t = Math.max(0, Math.min(1, mph / GAUGE_MAX));
+  gauge.arc.setAttribute('stroke-dasharray', t.toFixed(4) + ' 1');
+  gauge.arc.setAttribute('stroke', speedColor(mph));
+  gauge.ndl.setAttribute('transform', `rotate(${gaugeAngle(mph).toFixed(1)} 60 56)`);
+  gauge.mph.textContent = Math.round(mph);
+  gauge.avg.textContent = avgMph == null ? '—' : avgMph.toFixed(1) + ' mph';
+  gauge.date.textContent = dayDate(pb.day, absSec);
+  gauge.time.textContent = hhmm(absSec);
+}
 
 function dayLegs(dayKey) {
   const byTrip = {};
@@ -185,7 +260,16 @@ function dayLegs(dayKey) {
     if (prev >= 0 && l.s0 < prev - 3600) off += 86400;   // crossed midnight
     l.abs = l.s0 + off; prev = l.s0;
     l.cumDur = driveSec; driveSec += l.dur;
-    for (let k = 1; k < l.pts.length; k++) distMi += hmiles(l.pts[k - 1], l.pts[k]);
+    // Prefix distances, so "average speed from the start to here" is a lookup
+    // rather than an accumulation. It must NOT be accumulated per frame: seeking
+    // jumps pb.li/pb.lt without replaying, which would leave a running total
+    // permanently wrong. Measured 0.8 ms to build across a 1,885-point day.
+    l.cumMi = distMi;
+    l.pfx = [0];
+    for (let k = 1; k < l.pts.length; k++) {
+      l.pfx[k] = l.pfx[k - 1] + hmiles(l.pts[k - 1], l.pts[k]);
+    }
+    distMi += l.pfx[l.pfx.length - 1];
     l.gap = i > 0 ? Math.max(0, l.abs - (legs[i - 1].abs + legs[i - 1].dur)) : 0;
     if (l.gap <= IDLE_SKIP) l.gap = 0;
   });
@@ -238,11 +322,21 @@ function pbFrameRender() {
     pb.partial.setStyle(pbStyle(leg));
   }
   const inst = segSpeedFrom(pos.a, pos.b, pos.span);   // clamped inside
-  pb.spd = pb.spd * 0.72 + inst * 0.28;
+  // A per-frame EMA has a time constant that scales with the frame rate AND the
+  // playback multiple, so at 1x the needle snapped point-to-point instead of
+  // sweeping. Smooth over a fixed 0.45 s of WALL clock instead; with no frame
+  // delta (a seek, a restyle) take the instantaneous value rather than drift.
+  const dt = pb.dt || 0; pb.dt = 0;
+  pb.spd = dt > 0 ? pb.spd + (inst - pb.spd) * (1 - Math.exp(-dt / 0.45)) : inst;
   const col = mode === 'speed' ? speedColor(inst) : pbStyle(leg).color;
   pb.marker.setLatLng(pos.latlng); pb.marker.setStyle({ fillColor: col });
   pb.halo.setLatLng(pos.latlng); pb.halo.setStyle({ fillColor: col });
   pbReadout(leg);
+  const doneSec = leg.cumDur + pb.lt;
+  const doneMi = leg.cumMi + leg.pfx[pos.j] + hmiles(leg.pts[pos.j], pos.latlng);
+  // Under a minute the average is Infinity at t=0 and meaningless just after,
+  // including after any seek back to the start.
+  pbGaugeUpdate(pb.spd, doneSec > 60 ? doneMi / (doneSec / 3600) : null, leg.abs + pb.lt);
   if (!pb.scrubbing) pbEls.seek.value = Math.round(pbProgress() * 1000);
 }
 function pbReadout(leg) {
@@ -289,6 +383,7 @@ function pbTick(ts) {
   }
   if (pb.last == null) pb.last = ts;
   const dtms = Math.min(80, ts - pb.last); pb.last = ts;
+  pb.dt = dtms / 1000;                   // wall-clock delta, for the gauge's smoothing
   pb.lt += (dtms / 1000) * pb.mult;      // mult is a true multiple of real time
   while (pb.li < pb.legs.length && pb.lt >= pb.legs[pb.li].dur) {   // crossed one or more leg ends
     pb.lt -= pb.legs[pb.li].dur; pb.li++;
@@ -299,8 +394,14 @@ function pbTick(ts) {
     if (pb.legs[pb.li].gap > 0) {             // hybrid: skip the wait, flash it, jump the car
       pbFrameRender();                        // lay down the leg just finished
       pb.idleUntil = ts + 1200; pb.last = null;
-      pb.marker.setLatLng(pb.legs[pb.li].pts[0]); pb.halo.setLatLng(pb.legs[pb.li].pts[0]);
-      pbFlashIdle(pb.legs[pb.li].gap); pb.raf = requestAnimationFrame(pbTick); return;
+      const nxt = pb.legs[pb.li];
+      pb.marker.setLatLng(nxt.pts[0]); pb.halo.setLatLng(nxt.pts[0]);
+      // Nothing renders during the flash, so without this the gauge would hold
+      // stale values while the clock visibly jumps — the car is parked, and the
+      // time shown must be when the next job actually starts.
+      pb.spd = 0;
+      pbGaugeUpdate(0, nxt.cumDur > 60 ? nxt.cumMi / (nxt.cumDur / 3600) : null, nxt.abs);
+      pbFlashIdle(nxt.gap); pb.raf = requestAnimationFrame(pbTick); return;
     }
   }
   pbFrameRender();
@@ -312,9 +413,14 @@ function pbInit(dayKey) {
   const { legs, driveSec, distMi } = dayLegs(dayKey);
   if (!legs.length || driveSec < 1) return false;
   if (layer) { layer.remove(); layer = null; }
-  pb = { day: dayKey, legs, driveSec, distMi, li: 0, lt: 0, mult: pbDefaultMult(driveSec), spd: 0,
-         playing: false, done: false, drawn: 0, segDrawn: 0, last: null, idleUntil: 0 };
+  // An explicitly chosen speed sticks across day changes — with day navigation
+  // now in the bar you switch days constantly, and having 1x silently revert
+  // to the auto-picked multiple every time would be maddening.
+  pb = { day: dayKey, legs, driveSec, distMi, li: 0, lt: 0,
+         mult: userMult || pbDefaultMult(driveSec), spd: 0,
+         playing: false, done: false, drawn: 0, segDrawn: 0, last: null, idleUntil: 0, dt: 0 };
   pbSyncMultBtns(pb.mult);
+  if (gauge) gauge.box.classList.add('on');
   pb.rend = L.canvas({ padding: 0.5 });     // laid-down trail (redrawn only as segments land)
   pb.mrend = L.canvas({ padding: 0.5 });    // live edge + marker (cheap per-frame redraw)
   pb.ghost = L.geoJSON(DATA.days[dayKey], { style: { color: '#94a3b8', weight: 1.5, opacity: .18 }, interactive: false }).addTo(map);
@@ -333,6 +439,7 @@ function pbTeardown(restore) {
     [pb.ghost, pb.trail, pb.partial, pb.halo, pb.marker].forEach(l => l && map.removeLayer(l));
     pb = null;
   }
+  if (gauge) gauge.box.classList.remove('on');
   if (restore) render(false);
 }
 function pbReset() { pb.trail.clearLayers(); pb.drawn = 0; pb.segDrawn = 0; pb.li = 0; pb.lt = 0; pb.spd = 0; pb.done = false; pb.idleUntil = 0; }
@@ -499,42 +606,89 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
 
   // ---- full-screen overlay ----
   // In full screen the page behind the map is not rendered at all, so the
-  // controls have to come with it. A day stepper stands in for the <select>
-  // (see .ovonly in style.css); everything else is the real node, moved.
+  // controls have to come with it. Day navigation lives in the play bar itself
+  // (transport controls belong together, and selection is upstream of
+  // playback); the layer controls fold up out of that bar; only the legend
+  // stays pinned top-right, because it has to stay readable WHILE a day plays.
   const step = document.createElement('span');
   step.id = 'dayStep';
   step.className = 'ovonly';
   step.innerHTML = '<button type="button" aria-label="Previous day">&lsaquo;</button>' +
-                   '<b role="status"></b>' +   // announces the day, as the <select> it replaces did
-                   '<button type="button" aria-label="Next day">&rsaquo;</button>';
-  const stepLbl = step.querySelector('b'), stepBtn = step.querySelectorAll('button');
+                   '<button type="button" class="daylab" aria-haspopup="true" aria-expanded="false"></button>' +
+                   '<button type="button" aria-label="Next day">&rsaquo;</button>' +
+                   '<div class="daypick" role="menu" aria-label="Pick a day"></div>';
+  const stepBtn = step.querySelectorAll('button');
+  const stepPrev = stepBtn[0], stepLbl = stepBtn[1], stepNext = stepBtn[2];
+  const pick = step.querySelector('.daypick');
+  let stepTimer = null;
   const stepGo = d => {
     const i = Math.max(1, Math.min(sel.options.length - 1, sel.selectedIndex + d));   // 0 is "All days"
     if (i === sel.selectedIndex) return;
     sel.selectedIndex = i;
-    sel.dispatchEvent(new Event('change'));
+    // Every day change tears the playback down and refits the map, so a fast
+    // double-tap on the arrows would run that twice for one intention.
+    clearTimeout(stepTimer);
+    stepTimer = setTimeout(() => sel.dispatchEvent(new Event('change')), 130);
+    syncStep();
   };
-  stepBtn[0].addEventListener('click', () => stepGo(-1));
-  stepBtn[1].addEventListener('click', () => stepGo(1));
+  stepPrev.addEventListener('click', () => stepGo(-1));
+  stepNext.addEventListener('click', () => stepGo(1));
+
+  // 31 days over a 47-day span with 9 gaps: stepping alone is 30 clicks end to
+  // end, so the label doubles as a picker showing every day at once. It is a
+  // child of the bar, never body-appended — a panel outside the fullscreen
+  // element simply does not render, which is why #dayStep exists at all.
+  const setPick = on => { pick.classList.toggle('open', on); stepLbl.setAttribute('aria-expanded', String(on)); };
+  function buildPick() {
+    let html = '', lastMon = '';
+    for (let i = 1; i < sel.options.length; i++) {
+      const o = sel.options[i], mon = MONS[+o.value.slice(4, 6) - 1];
+      if (mon !== lastMon) { html += `<div class="mon">${mon}</div>`; lastMon = mon; }
+      const trips = (o.textContent.match(/(\d+) trip/) || [])[1] || '';
+      html += `<button type="button" role="menuitem" data-i="${i}">${+o.value.slice(6, 8)} ${mon}` +
+              `<i>${trips} trip${trips === '1' ? '' : 's'}</i></button>`;
+    }
+    pick.innerHTML = html;
+    pick.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      setPick(false);
+      if (+b.dataset.i === sel.selectedIndex) return;
+      sel.selectedIndex = +b.dataset.i;
+      sel.dispatchEvent(new Event('change'));
+    }));
+  }
+  stepLbl.addEventListener('click', () => setPick(!pick.classList.contains('open')));
+  // Escape deliberately not wired: on desktop the map is in NATIVE full screen,
+  // where the browser consumes Escape to exit and no handler can stop it — so
+  // Escape here would drop the viewer out of full screen, not close the picker.
+  map.on('click movestart', () => setPick(false));
+
   function syncStep() {
     const day = sel.value === 'ALL' ? 'All days'
       : sel.options[sel.selectedIndex].textContent.split(' — ')[0];
     stepLbl.textContent = day;
-    stepBtn[0].setAttribute('aria-label', 'Previous day (showing ' + day + ')');
-    stepBtn[1].setAttribute('aria-label', 'Next day (showing ' + day + ')');
+    stepLbl.setAttribute('aria-label', 'Pick a day (showing ' + day + ')');
+    stepPrev.setAttribute('aria-label', 'Previous day (showing ' + day + ')');
+    stepNext.setAttribute('aria-label', 'Next day (showing ' + day + ')');
     const dis = [sel.selectedIndex <= 1, sel.selectedIndex >= sel.options.length - 1];
     // Stepping to the last day disables the button you just pressed, which
     // drops focus to <body>; hand it to the sibling before that happens.
-    dis.forEach((d, i) => { if (d && document.activeElement === stepBtn[i]) stepBtn[1 - i].focus(); });
-    stepBtn[0].disabled = dis[0];
-    stepBtn[1].disabled = dis[1];
+    if (dis[0] && document.activeElement === stepPrev) stepNext.focus();
+    if (dis[1] && document.activeElement === stepNext) stepPrev.focus();
+    stepPrev.disabled = dis[0];
+    stepNext.disabled = dis[1];
+    pick.querySelectorAll('button').forEach(b =>
+      b.classList.toggle('on', +b.dataset.i === sel.selectedIndex));
   }
-  document.querySelector('.controls').append(step);
+  pbar.prepend(step);          // first in the bar: selection precedes transport
+  buildPick();
   mapOverlay(map, {
     bottom: [pbar],
-    tr: [step, document.getElementById('modeBtns'), document.getElementById('legend'),
-         document.getElementById('stats')],
+    drawer: [document.getElementById('modeBtns'), document.getElementById('stats')],
+    tr: [document.getElementById('legend')],
+    trLabel: 'Legend',
+    drawerLabel: '⚙ Layers',
   });
+  gauge = pbGaugeBuild(map.getContainer());
 
   // Speed colouring is per-segment; across all 31 days that is ~27k segments,
   // so it is offered for a single day only.
@@ -546,6 +700,10 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
     if (isAll && mode === 'speed') setColourMode('seg');
   }
   sel.addEventListener('change', () => {
+    // Stepping days mid-replay should keep replaying — otherwise every day
+    // change means reaching for Play again, which breaks the browsing rhythm
+    // the day-nav-in-the-bar change exists to create.
+    const wasPlaying = !!(pb && pb.playing);
     isolated = null;
     pbTeardown(false);
     pbEls.seek.value = 0;
@@ -553,6 +711,7 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
     syncStep();
     pbBtnLabel();
     render(true);
+    if (wasPlaying && sel.value !== 'ALL') pbPlay();
   });
   document.querySelectorAll('#modeBtns button').forEach(b =>
     b.addEventListener('click', () => {
@@ -575,7 +734,8 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
     b.addEventListener('click', () => {
       document.querySelectorAll('#pbSpd button').forEach(x => x.classList.remove('on'));
       b.classList.add('on');
-      if (pb) pb.mult = +b.dataset.s;
+      userMult = +b.dataset.s;          // an explicit choice, kept across day changes
+      if (pb) pb.mult = userMult;
     }));
   document.addEventListener('keydown', e => {
     // Anchors were missing from the old tag test, so Space on the focused
@@ -593,6 +753,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=31"></script>
+<script src="assets/nav.js?v=32"></script>
 </body>
 </html>

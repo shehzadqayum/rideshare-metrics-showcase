@@ -302,20 +302,24 @@ function mapExtras(map) {
    event handler and every update path (pbEls.read, the seek sync, the legend
    rebuild) keeps working with nothing rewired.
 
-   spec.bottom -> player bar across the foot; spec.tr -> panel at top right,
-   collapsible where the screen is small. Nodes are adopted in the order given. */
+   spec.bottom -> player bar across the foot; spec.drawer -> panel that folds up
+   out of that bar behind a toggle; spec.tr -> panel at top right, collapsible
+   where the screen is small (spec.trLabel names its toggle). Nodes are adopted
+   in the order given. Pages with no bottom bar (week, demand) use tr alone. */
 function mapOverlay(map, spec) {
   const el = map.getContainer();
   const hosts = {}, home = new Map();
+  let setDrawer = () => {};
   ['bottom', 'tr'].forEach(k => {
     const nodes = (spec[k] || []).filter(Boolean);
-    if (!nodes.length) return;
+    const drawerNodes = k === 'bottom' ? (spec.drawer || []).filter(Boolean) : [];
+    if (!nodes.length && !drawerNodes.length) return;
     const h = L.DomUtil.create('div', 'rs-ov rs-ov-' + k, el);
     let body = h;
     if (k === 'tr') {                      // collapsible header for small screens
       const tog = L.DomUtil.create('button', 'rs-ov-tog', h);
       tog.type = 'button';
-      tog.textContent = '⚙ Layers & legend';
+      tog.textContent = spec.trLabel || '⚙ Layers & legend';
       tog.setAttribute('aria-expanded', 'false');
       body = L.DomUtil.create('div', 'rs-ov-body', h);
       L.DomEvent.on(tog, 'click', () => {
@@ -324,11 +328,33 @@ function mapOverlay(map, spec) {
         tog.setAttribute('aria-expanded', String(on));
       });
     }
+    if (drawerNodes.length) {
+      const wrap = L.DomUtil.create('div', 'rs-ov-drawerwrap', h);
+      const draw = L.DomUtil.create('div', 'rs-ov-drawer', wrap);
+      const tog = L.DomUtil.create('button', 'rs-ov-drawtog', h);
+      tog.type = 'button';
+      tog.textContent = spec.drawerLabel || '⚙ Layers';
+      tog.setAttribute('aria-expanded', 'false');
+      // Clipped-but-present content stays focusable, so the drawer is inert
+      // while closed rather than merely out of sight.
+      draw.inert = true;
+      setDrawer = on => {
+        h.classList.toggle('draw-open', on);
+        tog.setAttribute('aria-expanded', String(on));
+        draw.inert = !on;
+      };
+      L.DomEvent.on(tog, 'click', () => setDrawer(!h.classList.contains('draw-open')));
+      // Escape cannot be used to close this: on desktop the map is in NATIVE
+      // full screen, where the browser consumes Escape to exit and no handler
+      // can prevent it. Closing on a map gesture is the reliable equivalent.
+      map.on('click movestart', () => setDrawer(false));
+      hosts.drawer = { body: draw, nodes: drawerNodes };
+    }
     // Without this, dragging the scrubber pans the map underneath and a click
     // on any button also registers as a map click (which clears the isolation).
     L.DomEvent.disableClickPropagation(h);
     L.DomEvent.disableScrollPropagation(h);
-    hosts[k] = { body, nodes };
+    if (nodes.length) hosts[k] = { body, nodes };
   });
 
   // Leaflet puts the tile attribution bottom-right, exactly where the player
@@ -349,6 +375,7 @@ function mapOverlay(map, spec) {
         h.body.append(n);
       }));
     } else {
+      setDrawer(false);            // never reopen full screen with it left hanging
       home.forEach((mark, n) => { mark.parentNode.insertBefore(n, mark); mark.remove(); });
       home.clear();
     }
@@ -359,5 +386,5 @@ function mapOverlay(map, spec) {
 
   map.on('rs:full', e => adopt(e.full));
   if (window.ResizeObserver && hosts.bottom) new ResizeObserver(lift).observe(hosts.bottom.body);
-  return { adopt };
+  return { adopt, setDrawer };
 }
