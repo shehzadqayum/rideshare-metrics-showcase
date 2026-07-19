@@ -60,7 +60,7 @@ function stateChart(el, rows, legendEl) {
   const min = Math.min(0, ...vals) - 4, max = Math.max(15, ...vals) + 4;
   const X = i => padL + (W - padL - padR) * i / (rows.length - 1);
   const Y = v => padT + (H - padT - padB) * (1 - (v - min) / (max - min));
-  const sc = { SUSTAINED: css('--good'), ACCEL_REC: css('--s1'), DECEL: css('--serious'), STALLED: css('--critical') };
+  const sc = { SUSTAINED: css('--st-sus'), ACCEL_REC: css('--st-acc'), DECEL: css('--st-dec'), STALLED: css('--st-stall') };
   let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%">`;
   [0, 15].forEach(gl => {
     s += `<line x1="${padL}" y1="${Y(gl)}" x2="${W - padR}" y2="${Y(gl)}" stroke="${gl === 15 ? css('--axis') : css('--grid')}" stroke-width="1" ${gl === 15 ? 'stroke-dasharray="4 4"' : ''}/>` +
@@ -76,7 +76,7 @@ function stateChart(el, rows, legendEl) {
   el.innerHTML = s + '</svg>';
   bindTips(el);
   if (legendEl) legendEl.innerHTML =
-    Object.entries({ SUSTAINED: '--good', 'ACCEL RECOVERY': '--s1', DECELERATING: '--serious', STALLED: '--critical' })
+    Object.entries({ SUSTAINED: '--st-sus', 'ACCEL RECOVERY': '--st-acc', DECELERATING: '--st-dec', STALLED: '--st-stall' })
       .map(([k, v]) => `<span><span class="sw" style="background:var(${v})"></span>${k}</span>`).join('');
 }
 

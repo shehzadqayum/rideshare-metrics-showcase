@@ -6,7 +6,7 @@
 <meta name="description" content="Pick any of seven GPS-tracked weeks and see every trip on one map, coloured by four-state, MNHR, earnings per hour or per mile. Click a route to isolate it.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Week deep dive — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=22">
+<link rel="stylesheet" href="assets/style.css?v=23">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 <style>
   .weekbar { position:sticky; top:var(--rsnav-h, 52px); z-index:5; background:var(--page); padding:10px 0 8px;
@@ -55,6 +55,17 @@
 
   <div class="cards" id="wkCards"></div>
 
+  <details class="fskey">
+    <summary>What do the four states mean?</summary>
+    <div class="g">
+      <div><i style="background:var(--st-sus)"></i><span><b>Sustained</b> — above target and still climbing. Keep going.</span></div>
+      <div><i style="background:var(--st-acc)"></i><span><b>Accel recovery</b> — below target, but recent trips beat the average; catching up.</span></div>
+      <div><i style="background:var(--st-dec)"></i><span><b>Decelerating</b> — above target, but the marginal rate is slipping.</span></div>
+      <div><i style="background:var(--st-stall)"></i><span><b>Stalled</b> — below target and not improving. Change something.</span></div>
+    </div>
+    <div class="more"><a href="framework.html">Full four-state matrix &amp; the framework →</a></div>
+  </details>
+
   <div class="panel">
     <h2>Routes <span id="wkWhen" style="font-weight:400;color:var(--muted);font-size:.8rem"></span></h2>
     <div class="note">Colour by:</div>
@@ -88,10 +99,14 @@
   <footer class="site">Data: docs/data/weeks.json — extracted from the pipeline's metrics engine with GPS
   tracks re-derived from the raw GPX logs. Map tiles © OpenStreetMap / CARTO.</footer>
 </main>
-<script src="assets/site.js?v=22"></script>
+<script src="assets/site.js?v=23"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
-const STATE_C = { SUSTAINED:'#15803d', ACCEL_REC:'#0e7490', DECEL:'#b45309', STALLED:'#b91c1c' };
+// One source of truth for the four-state palette: the theme-aware CSS vars
+// (also used by framework.html and metrics.html). STATE_V feeds HTML (theme-
+// reactive via var()); STATE_C resolves to literals for Leaflet canvas layers.
+const STATE_V = { SUSTAINED:'--st-sus', ACCEL_REC:'--st-acc', DECEL:'--st-dec', STALLED:'--st-stall' };
+const STATE_C = { SUSTAINED:css('--st-sus'), ACCEL_REC:css('--st-acc'), DECEL:css('--st-dec'), STALLED:css('--st-stall') };
 const STATE_L = { SUSTAINED:'Sustained', ACCEL_REC:'Accel recovery', DECEL:'Decelerating', STALLED:'Stalled' };
 const DEFAULT_C = '#2563eb', ENROUTE_C = '#94a3b8';
 const MLABEL = { mnhr:'MNHR (true) £/hr', per_hr:'£ per hour', per_mi:'£ per mile' };
@@ -220,7 +235,8 @@ function selectWeek(i) {
     card('£' + fmt(WK.rn, 2), 'CNHR', 'after £430 weekly cost') +
     card('£' + fmt(WK.mnhr, 2), 'MNHR (true, EMA)',
          (WK.mnhr > WK.rn ? 'above' : 'below') + ' CNHR → ' + (WK.mnhr > WK.rn ? 'improving' : 'deteriorating')) +
-    card(STATE_L[WK.state] || WK.state || '—', 'four-state', WK.be_trip ? `break-even @ #${WK.be_trip}` : 'no break-even');
+    card(`<span style="color:var(${STATE_V[WK.state] || '--ink'})">${STATE_L[WK.state] || WK.state || '—'}</span>`,
+         'four-state', WK.be_trip ? `break-even @ #${WK.be_trip}` : 'no break-even');
   document.getElementById('wkTable').innerHTML =
     '<table><tr><th>#</th><th>Day</th><th>Time</th><th>Service</th><th>From → To</th>'
     + '<th class="num">Earn</th><th class="num">Min</th><th class="num">Mi</th>'
@@ -239,7 +255,7 @@ function selectWeek(i) {
         + `<td class="num">${t.per_hr != null ? money(t.per_hr) : '—'}</td>`
         + `<td class="num">${t.per_mi != null ? money(t.per_mi) : '—'}</td>`
         + `<td class="num">${money(t.rn)}</td>`
-        + `<td>${STATE_L[t.state] || ''}</td></tr>`;
+        + `<td style="color:var(${STATE_V[t.state] || '--ink2'});font-weight:600">${STATE_L[t.state] || ''}</td></tr>`;
     }).join('')
     + '</table>';
   document.querySelectorAll('#wkTable tr.hasroute').forEach(r => {
@@ -299,6 +315,6 @@ getJSON('data/weeks.json').then(d => {
   }
 }).catch(dataFail('the week data'));
 </script>
-<script src="assets/nav.js?v=22"></script>
+<script src="assets/nav.js?v=23"></script>
 </body>
 </html>

@@ -6,7 +6,7 @@
 <meta name="description" content="How screenshots of ride offers become an honest hourly rate: the CNHR-MNHR pipeline, weekly results for 17 weeks, and the four-state diagnostic explained.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Trip-selection metrics — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=22">
+<link rel="stylesheet" href="assets/style.css?v=23">
 </head>
 <body>
 <main class="wrap" id="rsmain">
@@ -48,9 +48,10 @@
   </div>
 
   <div class="explain">
-    <b>Reading the states.</b> <i>Sustained</i>: above target and holding. <i>Accel recovery</i>: below
-    target but climbing (typical early in a week, before fixed costs are covered). <i>Decelerating</i>:
-    above water but slipping. <i>Stalled</i>: below target and flat. The first week reads −£182/h — six
+    <b>Reading the states.</b> <b style="color:var(--st-sus)">Sustained</b>: above target and holding.
+    <b style="color:var(--st-acc)">Accel recovery</b>: below target but climbing (typical early in a week,
+    before fixed costs are covered). <b style="color:var(--st-dec)">Decelerating</b>: above water but
+    slipping. <b style="color:var(--st-stall)">Stalled</b>: below target and flat. The first week reads −£182/h — six
     trips against a full week of fixed costs — which is exactly what the metric should say.
     <br><br>
     <b>The headline finding:</b> regression across these weeks showed <b>weekly hours, not trip quality,
@@ -72,8 +73,10 @@
 
   <footer class="site">Constants: weekly cost £430, target £15/h, EMA α = 0.15, baseline 20.05 h/week.</footer>
 </main>
-<script src="assets/site.js?v=22"></script>
+<script src="assets/site.js?v=23"></script>
 <script>
+const STATE_V = { SUSTAINED:'--st-sus', ACCEL_REC:'--st-acc', DECEL:'--st-dec', STALLED:'--st-stall' };
+const STATE_L = { SUSTAINED:'Sustained', ACCEL_REC:'Accel recovery', DECEL:'Decelerating', STALLED:'Stalled' };
 getJSON('data/metrics.json').then(m => {
   const w = m.weekly;
   const best = w.reduce((a, b) => b.cnhr > a.cnhr ? b : a);
@@ -86,10 +89,10 @@ getJSON('data/metrics.json').then(m => {
   stateChart(document.getElementById('cnhrChart'), w, document.getElementById('cnhrLegend'));
   document.getElementById('tbl').innerHTML =
     '<table><tr><th>Week</th><th class="num">Trips</th><th class="num">Earnings (scored)</th><th class="num">Hours</th><th class="num">CNHR £/h</th><th>State</th></tr>' +
-    w.map(r => `<tr><td>${r.label}</td><td class="num">${r.trips}</td><td class="num">£${fmt(r.earnings, 2)}</td><td class="num">${r.hours}</td><td class="num">${fmt(r.cnhr, 2)}</td><td>${r.state}</td></tr>`).join('') +
+    w.map(r => `<tr><td>${r.label}</td><td class="num">${r.trips}</td><td class="num">£${fmt(r.earnings, 2)}</td><td class="num">${r.hours}</td><td class="num">${fmt(r.cnhr, 2)}</td><td style="color:var(${STATE_V[r.state] || '--ink2'});font-weight:600">${STATE_L[r.state] || r.state}</td></tr>`).join('') +
     '</table>';
 }).catch(dataFail('the weekly metrics'));
 </script>
-<script src="assets/nav.js?v=22"></script>
+<script src="assets/nav.js?v=23"></script>
 </body>
 </html>
