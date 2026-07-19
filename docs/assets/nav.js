@@ -115,6 +115,20 @@
       }).join('')
     + '</div></div></div>';
   document.body.insertBefore(nav, document.body.firstChild);
+
+  // A padded <body> insets its children: the generated dashboard has
+  // body{padding:16px}, which dropped the toolbar ~16px down and in compared
+  // with every other page. Cancel the padding with negative margins so the
+  // bar is always flush with the viewport, and return the vertical space
+  // below it so the page's own content spacing is unchanged.
+  var bp = getComputedStyle(document.body);
+  if (parseFloat(bp.paddingTop)) {
+    nav.style.marginTop = '-' + bp.paddingTop;
+    nav.style.marginBottom = bp.paddingTop;
+  }
+  if (parseFloat(bp.paddingLeft)) nav.style.marginLeft = '-' + bp.paddingLeft;
+  if (parseFloat(bp.paddingRight)) nav.style.marginRight = '-' + bp.paddingRight;
+
   if (skip) {
     document.body.insertBefore(skip, nav);
     // The skip link sits outside the nav element, so it needs the palette too.
