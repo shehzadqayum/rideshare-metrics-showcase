@@ -145,6 +145,13 @@ function mapExtras(map) {
     frozen = true;                    // resize in flight: stop trusting moveend
     clearTimeout(settleTimer);
     settleTimer = setTimeout(() => {
+      // Never mutate the map mid-drag: Leaflet's drag handler caches its start
+      // position at mousedown, and moving the map underneath it corrupts the
+      // whole gesture. Wait for the drag to finish instead.
+      if (map.dragging && map.dragging.moving()) {
+        map.once('dragend', settle);
+        return;
+      }
       map.invalidateSize({ pan: false, animate: false });
       map.setView(view.c, view.z, { animate: false });
       frozen = false;
@@ -155,20 +162,14 @@ function mapExtras(map) {
   // so `frozen` is set before any interaction can record a shifted view.
   if (RO) new RO(settle).observe(el);
 
-  // Belt and braces for a click landing mid-transition, before the settle:
-  // re-sync and re-assert in the same breath. invalidateSize fires moveend
-  // synchronously, so freeze the recorder for the duration or it captures the
-  // shifted centre as the intended view before the restore runs.
-  map.on('mousedown', () => {
-    const r = el.getBoundingClientRect();
-    if (Math.abs(map.getSize().x - r.width) > 2 || Math.abs(map.getSize().y - r.height) > 2) {
-      const v = view;
-      frozen = true;
-      map.invalidateSize({ pan: false, animate: false });
-      map.setView(v.c, v.z, { animate: false });
-      frozen = false;
-    }
-  });
+  // Deliberately NO mousedown "guard" here. An earlier version re-synced the
+  // map inside mousedown when the cached size looked drifted — but fractional
+  // CSS sizes (full screen at OS display scaling) keep that comparison
+  // permanently tripped, so it fired on EVERY click, mutating the map exactly
+  // between Leaflet's drag handler caching its start position and the first
+  // drag movement. Result: a flicker on click and the view snapping away the
+  // moment a drag began, in full screen only. Any map mutation inside
+  // mousedown corrupts the drag gesture; resizes are the ResizeObserver's job.
 
   // Without ResizeObserver, re-check across the span a transition might take.
   const onTransition = RO ? settle : () => [0, 150, 400, 800].forEach(ms => setTimeout(settle, ms));

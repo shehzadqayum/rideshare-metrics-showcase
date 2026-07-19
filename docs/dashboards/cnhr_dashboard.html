@@ -207,6 +207,11 @@ window.addEventListener('load', function () {
       frozen = true;
       clearTimeout(settleTimer);
       settleTimer = setTimeout(function () {
+        // Never mutate the map mid-drag; wait for the gesture to finish.
+        if (map.dragging && map.dragging.moving()) {
+          map.once('dragend', settle);
+          return;
+        }
         map.invalidateSize({ pan: false, animate: false });
         map.setView(view.c, view.z, { animate: false });
         frozen = false;
@@ -214,18 +219,8 @@ window.addEventListener('load', function () {
     };
     var RO = window.ResizeObserver;
     if (RO) new RO(settle).observe(el);
-    // A click landing mid-transition re-syncs and re-asserts in the same
-    // breath - never one without the other.
-    map.on('mousedown', function () {
-      var r = el.getBoundingClientRect();
-      if (Math.abs(map.getSize().x - r.width) > 2 || Math.abs(map.getSize().y - r.height) > 2) {
-        var v = view;         // invalidateSize fires moveend synchronously
-        frozen = true;
-        map.invalidateSize({ pan: false, animate: false });
-        map.setView(v.c, v.z, { animate: false });
-        frozen = false;
-      }
-    });
+    // No mousedown guard: mutating the map inside mousedown corrupts the drag
+    // gesture (see site.js). Resizes are the ResizeObserver's job.
     var onTransition = RO ? settle : function () {
       [0, 150, 400, 800].forEach(function (ms) { setTimeout(settle, ms); });
     };
