@@ -97,13 +97,31 @@ window.addEventListener('load', function () {
     // centre away; hold the viewer's position across the resize.
     var pending = null;
     var remember = function () { pending = { c: map.getCenter(), z: map.getZoom() }; };
-    var resize = function () {
-      setTimeout(function () {
+    // Native full screen animates, so a fixed timeout syncs too early and leaves
+    // Leaflet holding a stale size - clicks then fling the view. Watch the
+    // container and re-sync when its size actually settles.
+    var settleTimer = null;
+    var settle = function () {
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(function () {
         map.invalidateSize({ pan: false, animate: false });
         if (pending) { map.setView(pending.c, pending.z, { animate: false }); pending = null; }
-      }, 80);
+      }, 150);
     };
-    var setMaxi = function (on) { el.classList.toggle('rs-maxi', on); label(); resize(); };
+    var RO = window.ResizeObserver;
+    if (RO) new RO(settle).observe(el);
+    // Belt and braces: a stale size only bites on interaction, so re-sync on
+    // the spot if the cached size has drifted before Leaflet uses it.
+    map.on('mousedown', function () {
+      var r = el.getBoundingClientRect();
+      if (Math.abs(map.getSize().x - r.width) > 2 || Math.abs(map.getSize().y - r.height) > 2) {
+        map.invalidateSize({ pan: false, animate: false });
+      }
+    });
+    var onTransition = RO ? settle : function () {
+      [0, 150, 400, 800].forEach(function (ms) { setTimeout(settle, ms); });
+    };
+    var setMaxi = function (on) { el.classList.toggle('rs-maxi', on); label(); onTransition(); };
     var Ctl = L.Control.extend({
       options: { position: 'topleft' },
       onAdd: function () {
@@ -132,7 +150,7 @@ window.addEventListener('load', function () {
       }
     });
     map.addControl(new Ctl());
-    var onChange = function () { label(); resize(); };
+    var onChange = function () { label(); onTransition(); };
     document.addEventListener('fullscreenchange', onChange);
     document.addEventListener('webkitfullscreenchange', onChange);
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && maxiOn()) setMaxi(false); });

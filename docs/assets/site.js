@@ -130,11 +130,38 @@ function mapExtras(map) {
   // France. Remember where the viewer was looking and restore it afterwards.
   let pending = null;
   const remember = () => { pending = { c: map.getCenter(), z: map.getZoom() }; };
-  const resize = () => setTimeout(() => {
-    map.invalidateSize({ pan: false, animate: false });
-    if (pending) { map.setView(pending.c, pending.z, { animate: false }); pending = null; }
-  }, 80);
-  const setMaxi = on => { el.classList.toggle('rs-maxi', on); label(); resize(); };
+
+  // Native full screen is an animated transition, so the final size arrives
+  // later than any fixed timeout would guess. Syncing too early leaves Leaflet
+  // holding a stale size: hit-testing and fitBounds then work off the wrong
+  // dimensions and clicks fling the view hundreds of miles. Watch the container
+  // instead and re-sync whenever its size actually settles.
+  let settleTimer = null;
+  const settle = () => {
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => {
+      map.invalidateSize({ pan: false, animate: false });
+      if (pending) { map.setView(pending.c, pending.z, { animate: false }); pending = null; }
+    }, 150);
+  };
+  const RO = window.ResizeObserver;
+  if (RO) new RO(settle).observe(el);
+
+  // Belt and braces. Every symptom of a stale size shows up on interaction —
+  // the click resolves against the wrong dimensions, so hit-testing misses and
+  // any fitBounds reframes onto the wrong place. Re-sync on the spot if the
+  // cached size has drifted from the real box, before Leaflet uses it.
+  const ensureSize = () => {
+    const r = el.getBoundingClientRect();
+    if (Math.abs(map.getSize().x - r.width) > 2 || Math.abs(map.getSize().y - r.height) > 2) {
+      map.invalidateSize({ pan: false, animate: false });
+    }
+  };
+  map.on('mousedown', ensureSize);
+  // Without ResizeObserver, re-check across the span a transition might take.
+  const settleRepeatedly = () => [0, 150, 400, 800].forEach(ms => setTimeout(settle, ms));
+  const onTransition = RO ? settle : settleRepeatedly;
+  const setMaxi = on => { el.classList.toggle('rs-maxi', on); label(); onTransition(); };
 
   let label = () => {};
   const Ctl = L.Control.extend({
@@ -168,7 +195,7 @@ function mapExtras(map) {
   });
   map.addControl(new Ctl());
 
-  const onChange = () => { label(); resize(); };
+  const onChange = () => { label(); onTransition(); };
   document.addEventListener('fullscreenchange', onChange);
   document.addEventListener('webkitfullscreenchange', onChange);
   // Escape exits the pinned mode; the native mode handles its own.
