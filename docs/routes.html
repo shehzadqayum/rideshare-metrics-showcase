@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=47">
+<link rel="stylesheet" href="assets/style.css?v=48">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -84,7 +84,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=47"></script>
+<script src="assets/site.js?v=48"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -181,11 +181,16 @@ const ptrs = new Set();
 // running off the map rather than the map keeping up with it.
 const FOLLOW_CAP = 0.20;
 const FOLLOW_MIN = 0.12;   // floor, so a short day's window is not vanishingly small
-// How much of the viewport the day's route should fill when play starts. Above
-// 2 x FOLLOW_CAP (40%) the route is wider than the pan-free window, so the map
-// WILL pan during the replay and the far end of the route leaves the screen -
-// that is the deliberate trade for a route large enough to read.
-const FRAME_FILL = 0.55;
+// How the day is framed when play starts.
+// FRAME_FILL is how much of the viewport the route fills IF it fits. MIN_PLAY_Z
+// is the floor, and it is the more important of the two: fitting the route can
+// never reach street level for a day that spans London - measured across the 31
+// days, even filling 85% of the viewport gives a median zoom of only 10.75,
+// which shows districts, not roads. The floor zooms in regardless and lets the
+// route overflow, which is the whole point of following the car.
+const FRAME_FILL = 0.85;
+const MIN_PLAY_Z = 13;     // street level; compact days that need more still get it
+const MAX_PLAY_Z = 15;
 
 // Follow mode: the map pans under the car to keep it centred.
 //
@@ -569,11 +574,15 @@ function pbInit(dayKey) {
     // animates, so it lands after the setZoom and overwrites it - measured, the
     // zoom came back as the plain fitting value every time.
     const b = pb.ghost.getBounds(), sz = map.getSize();
-    // Frame the day to fill FRAME_FILL of the viewport, so the route is big
-    // enough to read rather than a thread in an empty map. With follow off
-    // nothing can move the map, so let the route run bigger still.
-    const padFrac = follow ? 1 - FRAME_FILL : 0.12;
-    const z = Math.min(15, map.getBoundsZoom(b, false, L.point(sz.x * padFrac, sz.y * padFrac)));
+    // Fit the route, then floor it at street level. A long day will overflow the
+    // viewport and follow will carry the view along it; a compact day that wants
+    // more zoom than the floor still gets it.
+    const padFrac = 1 - FRAME_FILL;
+    const fit = map.getBoundsZoom(b, false, L.point(sz.x * padFrac, sz.y * padFrac));
+    // With follow off nothing can move the map, so the route has to stay whole:
+    // no floor there, or most of the day would sit off screen with no way back.
+    const z = follow ? Math.min(MAX_PLAY_Z, Math.max(fit, MIN_PLAY_Z))
+                     : Math.min(MAX_PLAY_Z, fit);
     map.setView(b.getCenter(), z, { animate: false });
   } catch (e) {}
   pbFrameRender(); pbBtnLabel();
@@ -965,6 +974,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=47"></script>
+<script src="assets/nav.js?v=48"></script>
 </body>
 </html>
