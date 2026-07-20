@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=53">
+<link rel="stylesheet" href="assets/style.css?v=54">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -84,7 +84,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=53"></script>
+<script src="assets/site.js?v=54"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -189,8 +189,8 @@ const FOLLOW_MIN = 0.12;   // floor, so a short day's window is not vanishingly 
 // which shows districts, not roads. The floor zooms in regardless and lets the
 // route overflow, which is the whole point of following the car.
 const FRAME_FILL = 0.85;
-const MIN_PLAY_Z = 15;     // street level; compact days that need more still get it
-const MAX_PLAY_Z = 17;
+const MIN_PLAY_Z = 16;     // street level; compact days that need more still get it
+const MAX_PLAY_Z = 18;
 
 // Look-ahead. Rather than zooming out at speed - a zoom re-projects every path
 // and measured 9.4-12.5 ms against a 16.7 ms frame, against 1.2 ms for a pan -
@@ -206,7 +206,11 @@ const LOOK_MAX = 0.30;      // at full speed the car sits this far back, as a
 // traffic - where more than half the driving is - it was zero and the car sat
 // dead centre with no road ahead of it. That got worse the further the zoom
 // came in, because the car pins to the forward edge sooner.
-const LOOK_MIN = 0.10;
+// Raised with every zoom step. Pinning to the forward edge gets stronger the
+// further in the zoom goes, and it eats the setback from the slow end first -
+// at z15 the 10-25 mph band fell to 1px before this floor existed, and at z16 it
+// fell back to 9px at 0.10. That band carries 54% of the driving.
+const LOOK_MIN = 0.16;
 const LOOK_FULL_MPH = 45;   // speed at which the offset is fully extended
 const LOOK_TAU = 1.2;       // seconds of wall clock to ease toward a new heading,
                             // so a junction turns the frame rather than snapping it
@@ -217,7 +221,7 @@ const LOOK_TAU = 1.2;       // seconds of wall clock to ease toward a new headin
 // always ends up a window-half AHEAD of the anchor. Giving it little room
 // forward and plenty behind is what actually turns the frame around.
 // Fractions of the shorter viewport axis.
-const WIN_FWD  = 0.03;      // room ahead of the anchor before the map is pulled
+const WIN_FWD  = 0.02;      // room ahead of the anchor before the map is pulled
 const WIN_BACK = 0.34;      // room behind it — generous, so slowing or turning
                             // does not drag the map back and forth
 const WIN_LAT  = 0.20;      // sideways, matching the old buffer
@@ -1071,6 +1075,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=53"></script>
+<script src="assets/nav.js?v=54"></script>
 </body>
 </html>
