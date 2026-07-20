@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=61">
+<link rel="stylesheet" href="assets/style.css?v=62">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -88,7 +88,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=61"></script>
+<script src="assets/site.js?v=62"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -157,6 +157,7 @@ function legend() {
 // (hybrid). The order and the speed are real; only the overall length is
 // compressed, and the clock shows the true time of day.
 let pb = null, userMult = null;   // userMult: a speed the viewer chose, kept across days
+let speedRend = null;             // one shared canvas for the speed-mode layer (see buildSpeedLayer)
 // Follow is the DEFAULT view mode: the replay is the point of this page, and
 // watching it from a fixed frame means watching a dot cross a static picture.
 let follow = true;
@@ -774,7 +775,15 @@ function pbTeardown(restore) {
   clearTimeout(contTimer);        // picking a day by hand cancels a pending roll-on
   if (pb) {
     if (pb.raf) cancelAnimationFrame(pb.raf);
-    [pb.ghost, pb.trail, pb.partial, pb.halo, pb.marker].forEach(l => l && map.removeLayer(l));
+    // The RENDERERS have to go too, not just the layers drawn on them. Leaflet
+    // adds an explicitly-passed renderer to the map as a layer the first time a
+    // path uses it, but Path.onRemove only unhooks the path — so every pbInit
+    // was leaving two full-viewport canvases behind. Measured: 8 days of
+    // playback left 15 canvas elements on the map and teardown removed none, and
+    // continuous play walks all 31 days on its own, so it grew unattended while
+    // every one of them was repositioned on every pan.
+    [pb.ghost, pb.trail, pb.partial, pb.halo, pb.marker, pb.rend, pb.mrend]
+      .forEach(l => l && map.removeLayer(l));
     pb = null;
   }
   if (gauge) gauge.box.classList.remove('on');
@@ -824,7 +833,12 @@ function pbRestyle() {          // colour-mode changed mid-playback: rebuild the
 // driven over it. Canvas-rendered: a day is a few thousand segments and SVG
 // would crawl. Offered for a single day only (see the day handler).
 function buildSpeedLayer(feats) {
-  const rend = L.canvas({ padding: 0.5 });
+  // Reused, not recreated. render() drops the LAYER when the day or mode
+  // changes, but a renderer is a layer in its own right and was never dropped
+  // with it, so every rebuild left another full-viewport canvas on the map —
+  // one per day under continuous play, on top of the two pbInit was leaking.
+  if (!speedRend) speedRend = L.canvas({ padding: 0.5 });
+  const rend = speedRend;
   const g = L.featureGroup();
   feats.forEach(f => {
     const p = f.properties, co = f.geometry.coordinates, t = p.t;
@@ -1166,6 +1180,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=61"></script>
+<script src="assets/nav.js?v=62"></script>
 </body>
 </html>
