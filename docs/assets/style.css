@@ -223,8 +223,13 @@ body.rs-maxi-lock { overflow:hidden; }
 .rs-ov .ovonly .daylab { font-size:.78rem; font-weight:600; min-width:82px; text-align:center; }
 /* The picker opens UPWARD as a child of the bar, never as a body-appended
    panel - that is exactly what does not render inside a fullscreen element. */
-.daypick { position:absolute; bottom:calc(100% + 9px); left:50%; transform:translateX(-50%);
-  width:min(92vw,430px); max-height:min(52dvh,320px); overflow-y:auto; display:none;
+/* Anchored to the stepper's LEFT edge, not centred on it: the stepper is the
+   first thing in the bar, so a 430px panel centred there hung off the left of
+   the screen. left:0 puts it inside the bar's own padding, which reads as a
+   deliberate offset, and the width is capped so it cannot overrun the right
+   edge on a narrow screen either. */
+.daypick { position:absolute; bottom:calc(100% + 9px); left:0;
+  width:min(430px, calc(100vw - 24px)); max-height:min(52dvh,320px); overflow-y:auto; display:none;
   background:#f7f4ee; background:rgba(247,244,238,.98); border:1px solid rgba(30,45,58,.34);
   border-radius:11px; box-shadow:0 4px 22px rgba(24,34,44,.32); padding:10px; z-index:10; }
 .daypick.open { display:grid; grid-template-columns:repeat(auto-fill,minmax(78px,1fr)); gap:5px; }
