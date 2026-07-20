@@ -57,9 +57,17 @@ function barChart(el, rows, opts = {}) {
 function stateChart(el, rows, legendEl) {
   const W = 940, H = 230, padL = 46, padB = 30, padT = 12, padR = 14;
   const vals = rows.map(r => r.cnhr);
-  const min = Math.min(0, ...vals) - 4, max = Math.max(15, ...vals) + 4;
+  // Week 1 is six trips against a full week's fixed cost, so its CNHR is
+  // -£182/h and it was setting the entire domain: every other week collapsed
+  // into a few pixels at the top and the £15 target line sat on the ceiling.
+  // Clamp to a readable floor and mark anything below it as clipped, so the
+  // outlier is still visible and still honest without flattening the story the
+  // chart exists to tell.
+  const FLOOR = -25;
+  const clipped = vals.filter(v => v < FLOOR);
+  const min = Math.min(0, ...vals.filter(v => v >= FLOOR)) - 4, max = Math.max(15, ...vals) + 4;
   const X = i => padL + (W - padL - padR) * i / (rows.length - 1);
-  const Y = v => padT + (H - padT - padB) * (1 - (v - min) / (max - min));
+  const Y = v => padT + (H - padT - padB) * (1 - (Math.max(v, min) - min) / (max - min));
   const sc = { SUSTAINED: css('--st-sus'), ACCEL_REC: css('--st-acc'), DECEL: css('--st-dec'), STALLED: css('--st-stall') };
   let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%">`;
   [0, 15].forEach(gl => {
@@ -73,6 +81,9 @@ function stateChart(el, rows, legendEl) {
       data-tip="${r.label} — £${r.cnhr}/h · ${r.state} · ${r.trips} trips"/>`;
     if (i % 2 === 0) s += `<text x="${X(i)}" y="${H - padB + 14}" text-anchor="middle" font-size="8.5" fill="${css('--muted')}">${r.week.slice(5)}</text>`;
   });
+  if (clipped.length) s += `<text x="${padL + 4}" y="${H - padB - 5}" font-size="9" fill="${css('--muted')}">`
+    + `${clipped.length === 1 ? 'week 1' : clipped.length + ' weeks'} below the axis `
+    + `(${clipped.map(v => '£' + Math.round(v)).join(', ')}/h) shown clamped</text>`;
   el.innerHTML = s + '</svg>';
   bindTips(el);
   if (legendEl) legendEl.innerHTML =

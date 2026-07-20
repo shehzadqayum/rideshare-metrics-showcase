@@ -1,6 +1,6 @@
 # Ride-share metrics — a working showcase
 
-Between **December 2025 and March 2026** I drove **890+ private-hire (Uber) trips across London** in an
+Between **December 2025 and March 2026** I drove **778 private-hire (Uber) trips across London** in an
 electric vehicle. Alongside the driving I built a suite of software tools — using AI-assisted development
 with **Claude Code** — to automate the paperwork and to answer two questions with data:
 
@@ -51,7 +51,7 @@ scripts/
 ## Headline numbers (all real)
 
 - 931 portal activities · **£12,813** gross over 17 Uber weeks
-- **643 GPS route segments** across 31 tracked days, mapped with per-segment distance, speed and earnings
+- **GPS route segments — counted live on the site GPS route segments** across 31 tracked days, mapped with per-segment distance, speed and earnings
 - 356 of 778 portal-recorded trips carry a GPS route, across 7 of the 17 weeks
 - 762 screenshot-extracted trips scored against portal earnings; **6/17 weeks** hit the £15/h after-cost target
 - 82 charging sessions · 3,540 kWh · **£1,428** — parsed from invoices, feeding the cost model

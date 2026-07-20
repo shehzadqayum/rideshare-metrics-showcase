@@ -136,7 +136,18 @@ tr.map-selected{background:#1e293b!important;outline:1px solid #3b82f6}
   tr.map-clickable.no-track td:first-child{opacity:.55}
   /* Full-screen map, matching the handwritten pages. */
   .leaflet-container:fullscreen,.leaflet-container:-webkit-full-screen{width:100%!important;height:100%!important;border-radius:0}
-  .leaflet-container.rs-maxi{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2000!important;border-radius:0}
+  /* 100dvh, not 100vh: on iOS Safari 100vh is the LARGE viewport, so a pinned
+     map runs under the browser toolbar and takes its controls with it. The
+     vh line stays first as the fallback. iPhone is the ONLY path here -
+     Safari exposes no requestFullscreen on a div, so this pinned mode is
+     what every iPhone visitor gets. */
+  .leaflet-container.rs-maxi{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;height:100dvh!important;z-index:2000!important;border-radius:0}
+  body.rs-maxi-lock{overflow:hidden}
+  /* the pinned map's only exit on a phone is this control, so it must be a
+     real touch target rather than Leaflet's 30px default */
+  @media (max-width:760px),(max-height:540px){
+    .rs-fs a{min-width:44px;min-height:44px;line-height:44px}
+  }
   .rs-fs a{font-size:15px;line-height:26px;text-align:center;font-weight:600;cursor:pointer}
 </style>
 <script>
@@ -239,13 +250,24 @@ window.addEventListener('load', function () {
     var onTransition = RO ? settle : function () {
       [0, 150, 400, 800].forEach(function (ms) { setTimeout(settle, ms); });
     };
-    var setMaxi = function (on) { el.classList.toggle('rs-maxi', on); label(); onTransition(); };
+    var setMaxi = function (on) {
+      el.classList.toggle('rs-maxi', on);
+      // without this the document behind keeps scrolling, and its scrollbars
+      // sit over the map
+      document.body.classList.toggle('rs-maxi-lock', on);
+      label(); onTransition();
+    };
     var Ctl = L.Control.extend({
       options: { position: 'topleft' },
       onAdd: function () {
         var wrap = L.DomUtil.create('div', 'leaflet-bar leaflet-control rs-fs');
         var a = L.DomUtil.create('a', '', wrap);
         a.href = '#'; a.setAttribute('role', 'button');
+        // It presents as role="button", but an anchor fires click on Enter only,
+        // so Space - the other key a button owes its user - did nothing here.
+        L.DomEvent.on(a, 'keydown', function (e) {
+          if (e.key === ' ' || e.key === 'Spacebar') { L.DomEvent.stop(e); a.click(); }
+        });
         label = function () {
           a.title = isFull() ? 'Exit full screen' : 'View full screen';
           a.setAttribute('aria-label', a.title);
@@ -1200,7 +1222,7 @@ render();
 })();
 </script>
 <!--/MAPFX-->
-<script src="../assets/nav.js?v=63"></script>
+<script src="../assets/nav.js?v=64"></script>
 <!--TIDY-->
 <script>
 (function(){

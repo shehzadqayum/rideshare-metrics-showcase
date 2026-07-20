@@ -174,3 +174,53 @@
     close(); btn.focus();
   });
 })();
+
+/* ---- sharing metadata + authorship -------------------------------------
+   This URL gets pasted into application forms, LinkedIn messages and recruiter
+   chat. Without og: tags it previewed as a bare string of characters in every
+   client that reads them exclusively (WhatsApp, Signal, iMessage), which is a
+   poor first impression of a portfolio about presenting data well.
+
+   And the site never said whose portfolio it was: a hiring manager forwarded
+   the link with no CV attached had no name, no contact and no way to connect it
+   to an application. Injected here because nav.js already runs on every page,
+   so it is one edit rather than eight that can drift apart. */
+(function meta() {
+  var AUTHOR = 'Shehzad Qayum';
+  var SITE = 'https://shehzadqayum.github.io/rideshare-metrics-showcase/';
+  var head = document.head;
+  var page = (location.pathname.split('/').pop() || 'index.html');
+  var title = (document.title || 'Ride-share metrics').replace(/\s*—.*$/, '');
+  var desc = (document.querySelector('meta[name=description]') || {}).content || '';
+
+  var add = function (attr, key, val) {
+    if (!val || head.querySelector('meta[' + attr + '="' + key + '"]')) return;
+    var m = document.createElement('meta');
+    m.setAttribute(attr, key); m.content = val; head.appendChild(m);
+  };
+  add('name', 'author', AUTHOR);
+  add('property', 'og:type', 'website');
+  add('property', 'og:site_name', 'Ride-share metrics — a working showcase');
+  add('property', 'og:title', document.title || title);
+  add('property', 'og:description', desc);
+  add('property', 'og:url', SITE + (page === 'index.html' ? '' : page));
+  add('name', 'twitter:card', 'summary_large_image');
+  add('name', 'twitter:title', document.title || title);
+  add('name', 'twitter:description', desc);
+  // Canonical, so the with- and without-index.html forms do not compete.
+  if (!head.querySelector('link[rel=canonical]')) {
+    var c = document.createElement('link');
+    c.rel = 'canonical'; c.href = SITE + (page === 'index.html' ? '' : page);
+    head.appendChild(c);
+  }
+  // A byline, once, at the foot of whichever container the page uses.
+  var host = document.querySelector('footer.site') || document.querySelector('main, .wrap');
+  if (host && !document.getElementById('rsby')) {
+    var b = document.createElement('div');
+    b.id = 'rsby';
+    b.style.cssText = 'margin-top:14px;font-size:.74rem;color:var(--muted)';
+    b.innerHTML = 'Built by <b style="color:var(--ink2)">' + AUTHOR + '</b> · ' +
+      '<a href="https://github.com/shehzadqayum">github.com/shehzadqayum</a>';
+    host.appendChild(b);
+  }
+})();

@@ -6,7 +6,7 @@
 <meta name="description" content="EV charging invoices from four networks parsed by AI into per-session records - the cost side of every profitability figure on this site.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>EV running costs — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=63">
+<link rel="stylesheet" href="assets/style.css?v=64">
 </head>
 <body>
 <main class="wrap" id="rsmain">
@@ -42,14 +42,18 @@
   <footer class="site">Tool: Python CLI over the Anthropic API, per-file extraction cache, 82 sessions
   across 19 locations and 4 providers.</footer>
 </main>
-<script src="assets/site.js?v=63"></script>
+<script src="assets/site.js?v=64"></script>
 <script>
 getJSON('data/charging.json').then(c => {
   document.getElementById('hero').innerHTML =
     card(fmt(c.sessions), 'sessions', c.period[0] + ' → ' + c.period[1]) +
     card(fmt(c.kwh), 'kWh delivered', 'across 4 networks') +
     card('£' + fmt(c.cost), 'total cost', '£' + c.avg_cost_kwh.toFixed(2) + '/kWh average') +
-    card('£' + fmt(c.per_week_cost), 'per week', 'feeds the £430/wk cost model');
+    // Derived from what this page actually shows, not carried from upstream:
+    // the stored per_week_cost did not divide into the page's own total over
+    // its own week count (£1,428.20 / 17 = £84, not £89).
+    card('£' + fmt(c.cost / Object.keys(c.by_week).length), 'per week',
+         'measured across ' + Object.keys(c.by_week).length + ' weeks; feeds the £430/wk cost model');
   barChart(document.getElementById('wk'),
     Object.entries(c.by_week).map(([k, v]) => ({ label: k, short: k.slice(5), v: v.kwh })), {});
   document.getElementById('prov').innerHTML =
@@ -61,6 +65,6 @@ getJSON('data/charging.json').then(c => {
     Object.entries(c.by_time).map(([k, v]) => ({ label: k, short: k.split(' ')[0], v: v.sessions })), {});
 }).catch(dataFail('the charging data'));
 </script>
-<script src="assets/nav.js?v=63"></script>
+<script src="assets/nav.js?v=64"></script>
 </body>
 </html>

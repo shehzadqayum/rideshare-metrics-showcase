@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=63">
+<link rel="stylesheet" href="assets/style.css?v=64">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -72,7 +72,7 @@
       <li><b>£ per mile</b> — short central London hops often out-earn long motorway runs per mile;
       the gradient makes the good and bad corridors obvious.</li>
       <li><b>Coverage</b> — spanning inner and outer London, airports to suburbs, day and night shifts.</li>
-      <li><b>Play a day</b> — press <b>▶ Play a day</b> below the map (or pick a specific day first) to watch a
+      <li><b>Play a day</b> — press <b>▶ Play a day</b> in the bar above the map (or pick a specific day first) to watch a
       shift retrace itself at the real recorded speed: the car crawls in traffic and flies on the motorway, a
       live speedometer and the true time-of-day clock run alongside the trip count and earnings, and the idle
       waits between jobs are skipped.</li>
@@ -88,7 +88,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=63"></script>
+<script src="assets/site.js?v=64"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -885,11 +885,24 @@ function render(fit) {
     style: f => styleFor(f.properties),
     onEachFeature: (f, l) => {
       const p = f.properties;
-      const ppm = p.gbp && p.mi ? ' · £' + (p.gbp / p.mi).toFixed(2) + '/mi' : '';
-      l.bindTooltip(`<b>${p.seg}</b> ${p.service ? '· ' + p.service.toLowerCase() : ''}<br>` +
+      // The mi/min/mph/gbp properties describe the PAID trip and ride on both of
+      // its legs, so an en-route line was hovering with the fare and mileage of
+      // the trip it was only driving towards — flatly contradicting the page's
+      // own argument that the approach is unpaid. Measure the approach from its
+      // own geometry and times instead, and say what it earned: nothing.
+      if (p.seg === 'enroute') {
+        const mi = trackMiles([f]);
+        const t = p.t, min = t && t.length ? (t[t.length - 1] - t[0]) / 60 : null;
+        l.bindTooltip(`<b>en-route</b> · unpaid approach<br>` +
+          `heading to ${p.from || '?'}<br>` +
+          `${mi.toFixed(1)} mi · ${min != null ? min.toFixed(0) : '?'} min` +
+          (min ? ` · ${(mi / (min / 60)).toFixed(0)} mph` : '') +
+          `<br><b>£0.00</b> — this is the cost side of the trip`, { sticky: true });
+      } else l.bindTooltip(`<b>${p.seg}</b> ${p.service ? '· ' + p.service.toLowerCase() : ''}<br>` +
         `${p.from || '?'} → ${p.to || '?'}<br>` +
         `${p.mi ?? '?'} mi · ${p.min ?? '?'} min · ${p.mph ?? '?'} mph` +
-        (p.gbp != null ? `<br>£${p.gbp.toFixed(2)}${ppm}` : ''), { sticky: true });
+        (p.gbp != null ? `<br>£${p.gbp.toFixed(2)}${p.gbp && p.mi ? ' · £' + (p.gbp / p.mi).toFixed(2) + '/mi' : ''}`
+          : ''), { sticky: true });
       l.on('click', e => {
         L.DomEvent.stopPropagation(e);
         lastFeatureClick = Date.now();
@@ -1182,6 +1195,6 @@ getJSON('data/routes.json?v=28').then(d => {   // ?v bumped whenever the DATA ch
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=63"></script>
+<script src="assets/nav.js?v=64"></script>
 </body>
 </html>

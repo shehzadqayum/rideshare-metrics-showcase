@@ -6,7 +6,7 @@
 <meta name="description" content="London's live transport, aviation, events and weather turned into an hourly surge forecast with ranked priority windows and a positioning plan.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Surge dashboard — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=63">
+<link rel="stylesheet" href="assets/style.css?v=64">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 <style>
   .daybar { position:sticky; top:var(--rsnav-h, 52px); z-index:5; background:var(--page); padding:10px 0 8px; border-bottom:1px solid var(--border); margin-bottom:14px; }
@@ -126,13 +126,26 @@
   <footer class="site">Data: docs/data/demand.json — every saved multi-source capture, the generated surge
   report, and the SQLite session log. Map: OpenStreetMap / CARTO. Nothing mocked.</footer>
 </main>
-<script src="assets/site.js?v=63"></script>
+<script src="assets/site.js?v=64"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js" integrity="sha384-mFKkGiGvT5vo1fEyGCD3hshDdKmW3wzXW/x+fWriYJArD0R3gawT6lMvLboM22c0" crossorigin="anonymous"></script>
 <script>
 const HEATC = ['rgba(137,135,129,.16)', '#3fa34d', '#f5c542', '#f59e42', '#f5564a'];
 const HEATNAME = ['Baseline', 'Low', 'Moderate', 'High', 'Very High'];
-const MULTCOL = { red: '#f5564a', orange: '#f59e42', yellow: '#f5c542', blue: '#4da6ff', green: '#44d488', purple: '#b07aff' };
+// These are the SURGE REPORT's own palette, tuned for its near-black dashboard.
+// Dropped onto this page's light panel they were unreadable — yellow measured
+// 1.56:1 on --surface, i.e. the headline multiplier of every ranked window was
+// effectively invisible in the default colour scheme. Same mistake style.css
+// and week.html's STATE_C already document fixing elsewhere: a colour chosen
+// against one background does not travel to another.
+// Light values first, each ≥4.5:1 on --surface; the dark scheme keeps the
+// original bright set, which is what they were designed for.
+const MULTCOL_LIGHT = { red: '#c02626', orange: '#a2540b', yellow: '#7d5100',
+                        blue: '#14539e', green: '#0f6b3f', purple: '#6b3fc4' };
+const MULTCOL_DARK  = { red: '#f5564a', orange: '#f59e42', yellow: '#f5c542',
+                        blue: '#4da6ff', green: '#44d488', purple: '#b07aff' };
+const darkScheme = () => matchMedia('(prefers-color-scheme: dark)').matches;
+const MULTCOL = new Proxy({}, { get: (_, k) => (darkScheme() ? MULTCOL_DARK : MULTCOL_LIGHT)[k] });
 // marker palette — cool/dark hues only, so nothing competes with the warm heat ramp
 const MK = { road: '#334155', rail: '#7c3aed', airport: '#0891b2', fixture: '#db2777' };
 const TYPECOL = { surge: '#be185d', airport: MK.airport, fixture: MK.fixture };
@@ -254,11 +267,19 @@ getJSON('data/demand.json').then(D => {
 
     // getting around
     document.getElementById('aroundCards').innerHTML =
-      (c.bikes ? card(fmt(c.bikes.bikes), 'Santander bikes', `${c.bikes.pct}% of ${fmt(c.bikes.docks)} docks free`) : card('—', 'cycle hire', 'not collected')) +
+      // `docks` is the number of docking STATIONS, not docking points, so the
+      // old wording read "9,652 bikes ... of 800 docks free" - three numbers on
+      // one card that cannot all be true. Name each for what the feed means.
+      (c.bikes ? card(fmt(c.bikes.bikes), 'Santander bikes available', `across ${fmt(c.bikes.docks)} docking stations · ${c.bikes.pct}% of points free`) : card('—', 'cycle hire', 'not collected')) +
       (c.ev ? card(`${c.ev.available}/${c.ev.total}`, 'EV points free', `${c.ev.pct}% available`) : card('—', 'EV charging', 'not collected')) +
       (c.air ? card(c.air.index, 'air quality', (c.air.summary || '').slice(0, 48)) : card('—', 'air quality', 'not collected'));
-    document.getElementById('aviation').innerHTML = c.aviation ?
-      `<div class="cards mini" style="margin:0">${card(fmt(c.aviation.arrivals), 'arrivals/hr', `${fmt(c.aviation.international)} intl`)}${card(c.aviation.surge_rating || '—', 'aviation surge', 'AirLabs')}${card(fmt(c.aviation.cancellations), 'cancellations', `${fmt(c.aviation.delays)} delays`)}</div>` : na;
+    // An all-zero aviation object means AirLabs returned no schedule rows, not
+    // that no aircraft landed - and rendering it as measured zeros contradicted
+    // the surge forecast on this same page. Treat it as absent.
+    const av = c.aviation && (c.aviation.arrivals || c.aviation.international ||
+                             c.aviation.cancellations || c.aviation.delays) ? c.aviation : null;
+    document.getElementById('aviation').innerHTML = av ?
+      `<div class="cards mini" style="margin:0">${card(fmt(av.arrivals), 'arrivals/hr', `${fmt(av.international)} intl`)}${card(av.surge_rating || '—', 'aviation surge', 'AirLabs')}${card(fmt(av.cancellations), 'cancellations', `${fmt(av.delays)} delays`)}</div>` : na;
     document.getElementById('rail').innerHTML = c.rail ?
       `<div class="cards mini" style="margin:0">${card(c.rail.services != null ? Math.round(100 * c.rail.on_time / c.rail.services) + '%' : '—', 'on time', `${c.rail.on_time}/${c.rail.services}`)}${card(fmt(c.rail.avg_delay) + 'm', 'avg delay', `${c.rail.cancelled} cancelled`)}${card(fmt(c.rail.incidents), 'incidents', 'active')}</div>` : na;
 
@@ -313,6 +334,6 @@ getJSON('data/demand.json').then(D => {
   select(rich);
 }).catch(dataFail('the demand data'));
 </script>
-<script src="assets/nav.js?v=63"></script>
+<script src="assets/nav.js?v=64"></script>
 </body>
 </html>
