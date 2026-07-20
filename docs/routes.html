@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=44">
+<link rel="stylesheet" href="assets/style.css?v=45">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -84,7 +84,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=44"></script>
+<script src="assets/site.js?v=45"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -174,8 +174,13 @@ const ptrs = new Set();
 // leave it, and at the default framing follow costs exactly zero redraws.
 // It only starts panning once the viewer zooms in far enough that the route no
 // longer fits — which is the only time following is any use.
-const FOLLOW_CAP = 0.45;   // ceiling, so a deep zoom still tracks the car
-const FOLLOW_MIN = 0.12;   // floor, for the moment before a route exists
+// Ceiling and floor on the window's half-extent, as a fraction of the viewport
+// measured from the centre. 0.20 means the window spans the middle 40% and
+// leaves a 30% buffer against every edge — at the old 0.45 the car could get
+// to within 5% of the edge before anything moved, which read as the trace
+// running off the map rather than the map keeping up with it.
+const FOLLOW_CAP = 0.20;
+const FOLLOW_MIN = 0.12;   // floor, so a short day's window is not vanishingly small
 
 // Follow mode: the map pans under the car to keep it centred.
 //
@@ -210,8 +215,8 @@ function pbFollowTo(latlng) {
   // A continuously sliding map is a vestibular trigger, and follow is the only
   // thing on this site that moves on its own, so reduce widens the ceiling too.
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  sx = Math.min(sx, size.x * (reduce ? 0.48 : FOLLOW_CAP));
-  sy = Math.min(sy, size.y * (reduce ? 0.48 : FOLLOW_CAP));
+  sx = Math.min(sx, size.x * (reduce ? 0.30 : FOLLOW_CAP));
+  sy = Math.min(sy, size.y * (reduce ? 0.30 : FOLLOW_CAP));
   if (Math.abs(d.x) <= sx && Math.abs(d.y) <= sy) return;
 
   // Inside the window the trace runs free. AT the window edge the car holds
@@ -951,6 +956,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=44"></script>
+<script src="assets/nav.js?v=45"></script>
 </body>
 </html>
