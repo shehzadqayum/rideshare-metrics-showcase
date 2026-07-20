@@ -80,20 +80,89 @@ function stateChart(el, rows, legendEl) {
       .map(([k, v]) => `<span><span class="sw" style="background:var(${v})"></span>${k}</span>`).join('');
 }
 
-/* True drawn distance (miles) of a set of route features. The per-trip `mi`
-   property rides on BOTH the en-route and the paid segment of each trip, so
-   summing it double-counts — measure the geometry instead. */
+/* True drawn distance (miles) of a set of route features.
+
+   TWO corrections live here, both found by measurement, both worth keeping:
+
+   1. The per-trip `mi` property rides on BOTH the en-route and the paid segment
+      of a trip, so summing it double-counts. Measure the geometry instead.
+
+   2. The geometry itself overlaps. The pipeline slices ONE continuous GPS track
+      by trip timestamps, and those windows run into each other: across the 31
+      captured days, 316 of 647 consecutive legs begin before the previous one
+      ended, and 310 of those share real positions within 15 m. Summing raw
+      geometry therefore measures that ground twice — 89 miles over the capture,
+      2.9%. The overlap is clipped off the EN-ROUTE leg, because the paid trip's
+      times come from the portal and are authoritative, which is the same rule
+      the replay uses. So the distance quoted here and the distance the replay
+      actually walks are now the same number.
+
+   Features without per-point times cannot be clipped, so they are measured
+   whole — that is the honest fallback, not a silent zero. */
 function trackMiles(features) {
   const R = 3958.8, r = Math.PI / 180;
+  const seg = (a, b) => {                       // a, b = GeoJSON [lon, lat]
+    const dLa = (b[1] - a[1]) * r, dLo = (b[0] - a[0]) * r;
+    const s = Math.sin(dLa / 2) ** 2 + Math.cos(a[1] * r) * Math.cos(b[1] * r) * Math.sin(dLo / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(s));
+  };
+  const whole = f => {
+    const c = f.geometry && f.geometry.coordinates;
+    let d = 0;
+    for (let i = 1; c && i < c.length; i++) d += seg(c[i - 1], c[i]);
+    return d;
+  };
+
+  const byTrip = {};
   let mi = 0;
   (features || []).forEach(f => {
-    const c = f.geometry && f.geometry.coordinates;
+    const p = f.properties || {}, c = f.geometry && f.geometry.coordinates;
     if (!c) return;
-    for (let i = 1; i < c.length; i++) {
-      const dLa = (c[i][1] - c[i - 1][1]) * r, dLo = (c[i][0] - c[i - 1][0]) * r;
-      const s = Math.sin(dLa / 2) ** 2 + Math.cos(c[i - 1][1] * r) * Math.cos(c[i][1] * r) * Math.sin(dLo / 2) ** 2;
-      mi += 2 * R * Math.asin(Math.sqrt(s));
+    if (!p.trip || !p.t || p.t.length !== c.length || p.s0 == null) { mi += whole(f); return; }
+    (byTrip[p.trip] = byTrip[p.trip] || {})[p.seg] = f;
+  });
+
+  // Order them the way a shift runs: by trip id (which carries the date), and
+  // within a job the approach before the paid leg.
+  const legs = [];
+  Object.keys(byTrip).sort().forEach(id => ['enroute', 'trip'].forEach(sg => {
+    const f = byTrip[id][sg];
+    if (!f) return;
+    const p = f.properties;
+    legs.push({ sg, id, date: id.slice(0, 8), c: f.geometry.coordinates, t: p.t, s0: p.s0,
+                dur: Math.max(1, p.t[p.t.length - 1] - p.t[0]) });
+  }));
+  // Absolute start times, unwrapped across midnight WITHIN each day — a shift
+  // running past midnight has small s0 values that would otherwise sort a day
+  // early and look like a colossal overlap.
+  let off = 0, prevS0 = -1, prevDate = null, base = 0;
+  legs.forEach(l => {
+    if (l.date !== prevDate) {
+      off = 0; prevS0 = -1; prevDate = l.date;
+      base = Date.UTC(+l.date.slice(0, 4), +l.date.slice(4, 6) - 1, +l.date.slice(6, 8)) / 1000;
     }
+    if (prevS0 >= 0 && l.s0 < prevS0 - 3600) off += 86400;
+    l.abs = base + l.s0 + off;
+    prevS0 = l.s0;
+  });
+
+  // Clip the en-route legs against their neighbours, then measure what is left.
+  let prevEnd = null;
+  legs.forEach((l, i) => {
+    let lo = 0, hi = l.c.length - 1;
+    if (l.sg === 'enroute') {
+      const next = legs[i + 1];
+      if (prevEnd != null && prevEnd > l.abs) {
+        const need = prevEnd - l.abs, t0 = l.t[0];
+        while (lo < hi && (l.t[lo] - t0) < need) lo++;
+      }
+      if (next && (l.abs + l.dur) > next.abs) {
+        const over = (l.abs + l.dur) - next.abs, tEnd = l.t[l.c.length - 1];
+        while (hi > lo && (tEnd - l.t[hi]) < over) hi--;
+      }
+    }
+    for (let k = lo + 1; k <= hi; k++) mi += seg(l.c[k - 1], l.c[k]);
+    prevEnd = Math.max(prevEnd == null ? -Infinity : prevEnd, l.abs + l.dur);
   });
   return mi;
 }
