@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=56">
+<link rel="stylesheet" href="assets/style.css?v=57">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -86,7 +86,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=56"></script>
+<script src="assets/site.js?v=57"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -158,6 +158,12 @@ let pb = null, userMult = null;   // userMult: a speed the viewer chose, kept ac
 // Follow is the DEFAULT view mode: the replay is the point of this page, and
 // watching it from a fixed frame means watching a dot cross a static picture.
 let follow = true;
+// Whether follow was switched off DELIBERATELY, by the button, as opposed to
+// incidentally by dragging the map. The two must not be confused: a drag means
+// "let me look at something", a button press means "stop doing this". Without
+// the distinction, one drag silently changed the framing of every day played
+// afterwards — the map stopped zooming in and nothing on screen said why.
+let followUserOff = false;
 // Continuous play: a finished day rolls on to the next one, so the whole
 // capture period can be watched end to end without touching anything.
 let contPlay = true, contTimer = null;
@@ -659,6 +665,10 @@ function pbTick(ts) {
 function pbInit(dayKey) {
   pbTeardown(false);
   if (!DATA.days[dayKey]) return false;      // "ALL" has no single day to play
+  // Starting a replay re-arms follow if it was only shrugged off by a drag.
+  // Play means "drive me through this"; a drag three days ago should not still
+  // be deciding how this day is framed.
+  if (!follow && !followUserOff) setFollow(true);
   const { legs, driveSec, distMi } = dayLegs(dayKey);
   if (!legs.length || driveSec < 1) return false;
   if (layer) { layer.remove(); layer = null; }
@@ -1025,7 +1035,10 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   // which would otherwise leave follow locked off for good.
   window.addEventListener('blur', () => ptrs.clear());
   document.addEventListener('visibilitychange', () => { if (document.hidden) ptrs.clear(); });
-  document.getElementById('pbFollow').addEventListener('click', () => setFollow(!follow));
+  document.getElementById('pbFollow').addEventListener('click', () => {
+    followUserOff = follow;      // turning it off here is the deliberate kind
+    setFollow(!follow);
+  });
   const contBtn = document.getElementById('pbCont');
   const setCont = on => {
     contPlay = on;
@@ -1085,6 +1098,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=56"></script>
+<script src="assets/nav.js?v=57"></script>
 </body>
 </html>
