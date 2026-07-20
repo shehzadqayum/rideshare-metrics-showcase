@@ -6,7 +6,7 @@
 <meta name="description" content="How screenshots of ride offers become an honest hourly rate: the CNHR-MNHR pipeline, weekly results for 17 weeks, and the four-state diagnostic explained.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Trip-selection metrics — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=45">
+<link rel="stylesheet" href="assets/style.css?v=46">
 </head>
 <body>
 <main class="wrap" id="rsmain">
@@ -73,7 +73,7 @@
 
   <footer class="site">Constants: weekly cost £430, target £15/h, EMA α = 0.15, baseline 20.05 h/week.</footer>
 </main>
-<script src="assets/site.js?v=45"></script>
+<script src="assets/site.js?v=46"></script>
 <script>
 const STATE_V = { SUSTAINED:'--st-sus', ACCEL_REC:'--st-acc', DECEL:'--st-dec', STALLED:'--st-stall' };
 const STATE_L = { SUSTAINED:'Sustained', ACCEL_REC:'Accel recovery', DECEL:'Decelerating', STALLED:'Stalled' };
@@ -93,6 +93,6 @@ getJSON('data/metrics.json').then(m => {
     '</table>';
 }).catch(dataFail('the weekly metrics'));
 </script>
-<script src="assets/nav.js?v=45"></script>
+<script src="assets/nav.js?v=46"></script>
 </body>
 </html>

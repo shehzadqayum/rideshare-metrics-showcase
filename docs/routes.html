@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=45">
+<link rel="stylesheet" href="assets/style.css?v=46">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -84,7 +84,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=45"></script>
+<script src="assets/site.js?v=46"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -563,13 +563,17 @@ function pbInit(dayKey) {
     // Framed in ONE call. Doing fitBounds then setZoom does not work: fitBounds
     // animates, so it lands after the setZoom and overwrites it - measured, the
     // zoom came back as the plain fitting value every time.
-    const b = pb.ghost.getBounds();
-    let z = Math.min(14, map.getBoundsZoom(b, false, L.point(30, 30)));
-    // Follow re-centres on the car, which would push the far end of the route
-    // off screen at the exact fitting zoom. One step out halves the scale on
-    // both axes, so the whole day stays visible wherever the car is - including
-    // at the end, which is when the shape of the shift is worth seeing.
-    if (follow) z = Math.max(map.getMinZoom() || 0, z - 1);
+    const b = pb.ghost.getBounds(), sz = map.getSize();
+    // With follow on, frame the day to fit the PAN-FREE WINDOW rather than the
+    // whole viewport. Then the car cannot reach the window edge, so the map
+    // never pans, the entire route stays visible for the whole replay and at
+    // the end of it, and the framing costs no redraws. The padding is derived
+    // from FOLLOW_CAP, so changing the buffer reframes the day to match instead
+    // of quietly breaking the guarantee.
+    // With follow off nothing will move the map, so use the viewport itself and
+    // let the route run bigger.
+    const padFrac = follow ? 1 - 2 * FOLLOW_CAP : 0.12;
+    const z = Math.min(15, map.getBoundsZoom(b, false, L.point(sz.x * padFrac, sz.y * padFrac)));
     map.setView(b.getCenter(), z, { animate: false });
   } catch (e) {}
   pbFrameRender(); pbBtnLabel();
@@ -737,7 +741,12 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   });
   // Matches week.html and demand.html: a full-width map that swallowed the
   // wheel would trap the page scroll. Ctrl/⌘+wheel and the +/- controls zoom.
-  map = L.map('map').setView([51.52, -0.08], 11);
+  // zoomSnap 0.25 rather than whole levels. Framing a day to whole levels is at
+  // the mercy of where the route falls against a power of two: measured across
+  // the 31 days, the route covered anywhere from 23% to 46% of the viewport for
+  // the same intent. Quarter steps bring that to 34-40%, so every day is framed
+  // the same way. The cost is slightly softened tiles at fractional zoom.
+  map = L.map('map', { zoomSnap: 0.25 }).setView([51.52, -0.08], 11);
   mapExtras(map);   // wheel zoom + full-screen control, shared across every map
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
     { attribution: '© OpenStreetMap, © CARTO', maxZoom: 19 }).addTo(map);
@@ -956,6 +965,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=45"></script>
+<script src="assets/nav.js?v=46"></script>
 </body>
 </html>
