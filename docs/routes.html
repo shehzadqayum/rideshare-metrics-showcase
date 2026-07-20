@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=50">
+<link rel="stylesheet" href="assets/style.css?v=51">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -84,7 +84,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=50"></script>
+<script src="assets/site.js?v=51"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -206,6 +206,17 @@ const LOOK_FULL_MPH = 45;   // speed at which the offset is fully extended
 const LOOK_TAU = 1.2;       // seconds of wall clock to ease toward a new heading,
                             // so a junction turns the frame rather than snapping it
 
+// Asymmetric window, measured along the direction of travel rather than along
+// the screen axes. A symmetric window cannot put the car behind centre however
+// it is offset: the car is pinned to whichever edge it is driving toward, so it
+// always ends up a window-half AHEAD of the anchor. Giving it little room
+// forward and plenty behind is what actually turns the frame around.
+// Fractions of the shorter viewport axis.
+const WIN_FWD  = 0.05;      // room ahead of the anchor before the map is pulled
+const WIN_BACK = 0.34;      // room behind it — generous, so slowing or turning
+                            // does not drag the map back and forth
+const WIN_LAT  = 0.20;      // sideways, matching the old buffer
+
 // Follow mode: the map pans under the car to keep it centred.
 //
 // THE INVARIANT FROM THE FULL-SCREEN BUG HUNT APPLIES HERE IN FULL. Leaflet's
@@ -220,24 +231,34 @@ const LOOK_TAU = 1.2;       // seconds of wall clock to ease toward a new headin
 function pbLookAhead(pos, dt) {
   if (!pb) return;
   if (!pb.look) pb.look = { x: 0, y: 0 };
-  let tx = 0, ty = 0;
-  // Continuous framing motion is exactly what reduce asks us not to do, so the
-  // offset simply stays at zero there and the car rides centred.
-  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    const a = map.latLngToContainerPoint(pos.a), b = map.latLngToContainerPoint(pos.b);
-    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
-    if (len > 0.001) {
-      const size = map.getSize();
-      const px = Math.max(0, Math.min(1, pb.spd / LOOK_FULL_MPH))
-               * LOOK_MAX * Math.min(size.x, size.y);
-      tx = dx / len * px; ty = dy / len * px;
-    }
-  }
+  if (!pb.head) pb.head = { x: 0, y: 0 };
+  const a = map.latLngToContainerPoint(pos.a), b = map.latLngToContainerPoint(pos.b);
+  const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
   // Wall-clock easing, for the same reason the speedometer uses one: a per-frame
   // constant would change meaning with the frame rate and the playback multiple.
   const k = dt > 0 ? 1 - Math.exp(-dt / LOOK_TAU) : 1;
+  let hx = 0, hy = 0, tx = 0, ty = 0;
+  if (len > 0.001) {
+    hx = dx / len; hy = dy / len;
+    // Continuous framing motion is exactly what reduce asks us not to do, so
+    // the setback stays at zero there and the car rides centred.
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const size = map.getSize();
+      const px = Math.max(0, Math.min(1, pb.spd / LOOK_FULL_MPH))
+               * LOOK_MAX * Math.min(size.x, size.y);
+      tx = hx * px; ty = hy * px;
+    }
+  }
   pb.look.x += (tx - pb.look.x) * k;
   pb.look.y += (ty - pb.look.y) * k;
+  // The heading is eased as a DIRECTION and renormalised, so a turn swings the
+  // frame round rather than shrinking the vector through zero on the way.
+  if (hx || hy) {
+    pb.head.x += (hx - pb.head.x) * k;
+    pb.head.y += (hy - pb.head.y) * k;
+    const hl = Math.hypot(pb.head.x, pb.head.y);
+    if (hl > 0.05) { pb.head.x /= hl; pb.head.y /= hl; }
+  }
 }
 
 function pbFollowTo(latlng) {
@@ -255,9 +276,34 @@ function pbFollowTo(latlng) {
   // is what leaves the road ahead open.
   const look = pb && pb.look ? L.point(pb.look.x, pb.look.y) : L.point(0, 0);
   const d = map.latLngToContainerPoint(latlng).subtract(size.divideBy(2).subtract(look));
-  // Size the zone to the route's own half-extent at the current zoom, so at the
-  // default framing the car is inside it for the whole day and nothing pans.
-  // Two projections per frame; no allocation worth speaking of.
+  const reduceM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const u = pb && pb.head;
+
+  // ---- asymmetric, heading-relative window ----
+  // Resolve the car's offset along the direction of travel and across it, and
+  // allow far less room forward than back. This is the part a symmetric window
+  // cannot do: whatever the anchor, the car is pinned to the edge it drives
+  // into, so a symmetric window always leaves it a half-window AHEAD of the
+  // anchor and the frame shows road already travelled.
+  if (u && (u.x || u.y) && !reduceM) {
+    const m = Math.min(size.x, size.y);
+    const along = d.x * u.x + d.y * u.y;         // + is ahead of the anchor
+    const across = -d.x * u.y + d.y * u.x;
+    const fwd = m * WIN_FWD, back = m * WIN_BACK, side = m * WIN_LAT;
+    const oa = along > fwd ? along - fwd : along < -back ? along + back : 0;
+    const oc = across > side ? across - side : across < -side ? across + side : 0;
+    if (!oa && !oc) return;
+    // rotate the overshoot back into screen axes
+    const ox = Math.round(oa * u.x - oc * u.y);
+    const oy = Math.round(oa * u.y + oc * u.x);
+    if (!ox && !oy) return;
+    map.panBy([ox, oy], { animate: false });
+    return;
+  }
+
+  // ---- fallback: symmetric window ----
+  // Used before a heading exists, and under reduced motion where a discrete
+  // recentre beats a frame that is permanently drifting.
   let sx = size.x * FOLLOW_MIN, sy = size.y * FOLLOW_MIN;
   try {
     const b = pb.ghost.getBounds();
@@ -268,7 +314,7 @@ function pbFollowTo(latlng) {
   } catch (e) {}
   // A continuously sliding map is a vestibular trigger, and follow is the only
   // thing on this site that moves on its own, so reduce widens the ceiling too.
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduce = reduceM;
   sx = Math.min(sx, size.x * (reduce ? 0.30 : FOLLOW_CAP));
   sy = Math.min(sy, size.y * (reduce ? 0.30 : FOLLOW_CAP));
   if (Math.abs(d.x) <= sx && Math.abs(d.y) <= sy) return;
@@ -604,7 +650,7 @@ function pbInit(dayKey) {
   pb = { day: dayKey, legs, driveSec, distMi, li: 0, lt: 0,
          mult: userMult || PB_DEFAULT_MULT, spd: 0,
          playing: false, done: false, drawn: 0, segDrawn: 0, last: null, idleUntil: 0, dt: 0,
-         look: { x: 0, y: 0 } };
+         look: { x: 0, y: 0 }, head: { x: 0, y: 0 } };
   pbSyncMultBtns(pb.mult);
   if (gauge) gauge.box.classList.add('on');
   pb.rend = L.canvas({ padding: 0.5 });     // laid-down trail (redrawn only as segments land)
@@ -1020,6 +1066,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=50"></script>
+<script src="assets/nav.js?v=51"></script>
 </body>
 </html>
