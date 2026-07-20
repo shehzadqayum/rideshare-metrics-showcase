@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=48">
+<link rel="stylesheet" href="assets/style.css?v=50">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -84,7 +84,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=48"></script>
+<script src="assets/site.js?v=50"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -192,6 +192,20 @@ const FRAME_FILL = 0.85;
 const MIN_PLAY_Z = 13;     // street level; compact days that need more still get it
 const MAX_PLAY_Z = 15;
 
+// Look-ahead. Rather than zooming out at speed - a zoom re-projects every path
+// and measured 9.4-12.5 ms against a 16.7 ms frame, against 1.2 ms for a pan -
+// the car is held progressively BEHIND centre as it goes faster, which opens up
+// the road ahead. Same benefit, and it is only ever panning, so it is free.
+// Sized to beat the window, not just to nudge it. The car is held at the FORWARD
+// edge of the pan-free window by design, which alone puts it 119-170px ahead of
+// centre - so most of the frame is road already driven. The offset has to
+// exceed that window half-extent before it buys any forward view at all.
+const LOOK_MAX = 0.30;      // at full speed the car sits this far back, as a
+                            // fraction of the shorter viewport axis
+const LOOK_FULL_MPH = 45;   // speed at which the offset is fully extended
+const LOOK_TAU = 1.2;       // seconds of wall clock to ease toward a new heading,
+                            // so a junction turns the frame rather than snapping it
+
 // Follow mode: the map pans under the car to keep it centred.
 //
 // THE INVARIANT FROM THE FULL-SCREEN BUG HUNT APPLIES HERE IN FULL. Leaflet's
@@ -200,6 +214,32 @@ const MAX_PLAY_Z = 15;
 // the ~350 km jump that took four rounds to find. A per-frame pan is the most
 // dangerous possible version of that, so follow stands down for the whole time a
 // pointer is held and resumes on release.
+// Ease the look-ahead offset toward where the car is heading, scaled by how fast
+// it is going. Called from the render loop, where the wall-clock delta and the
+// current segment's direction are both to hand.
+function pbLookAhead(pos, dt) {
+  if (!pb) return;
+  if (!pb.look) pb.look = { x: 0, y: 0 };
+  let tx = 0, ty = 0;
+  // Continuous framing motion is exactly what reduce asks us not to do, so the
+  // offset simply stays at zero there and the car rides centred.
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const a = map.latLngToContainerPoint(pos.a), b = map.latLngToContainerPoint(pos.b);
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+    if (len > 0.001) {
+      const size = map.getSize();
+      const px = Math.max(0, Math.min(1, pb.spd / LOOK_FULL_MPH))
+               * LOOK_MAX * Math.min(size.x, size.y);
+      tx = dx / len * px; ty = dy / len * px;
+    }
+  }
+  // Wall-clock easing, for the same reason the speedometer uses one: a per-frame
+  // constant would change meaning with the frame rate and the playback multiple.
+  const k = dt > 0 ? 1 - Math.exp(-dt / LOOK_TAU) : 1;
+  pb.look.x += (tx - pb.look.x) * k;
+  pb.look.y += (ty - pb.look.y) * k;
+}
+
 function pbFollowTo(latlng) {
   if (!follow || ptrs.size) return;
   if (pb && pb.scrubbing) return;          // a scrub is the viewer driving, not the car
@@ -210,7 +250,11 @@ function pbFollowTo(latlng) {
   // an inertia coast, or arrowing the map, therefore became a tug of war.
   if (map._panAnim && map._panAnim._inProgress) return;
   const size = map.getSize();
-  const d = map.latLngToContainerPoint(latlng).subtract(size.divideBy(2));
+  // The window is centred on the ANCHOR, not on the viewport centre. The anchor
+  // sits upstream of centre by the look-ahead offset, so holding the car there
+  // is what leaves the road ahead open.
+  const look = pb && pb.look ? L.point(pb.look.x, pb.look.y) : L.point(0, 0);
+  const d = map.latLngToContainerPoint(latlng).subtract(size.divideBy(2).subtract(look));
   // Size the zone to the route's own half-extent at the current zoom, so at the
   // default framing the car is inside it for the whole day and nothing pans.
   // Two projections per frame; no allocation worth speaking of.
@@ -445,6 +489,7 @@ function pbFrameRender() {
   const col = mode === 'speed' ? speedColor(inst) : pbStyle(leg).color;
   pb.marker.setLatLng(pos.latlng); pb.marker.setStyle({ fillColor: col });
   pb.halo.setLatLng(pos.latlng); pb.halo.setStyle({ fillColor: col });
+  pbLookAhead(pos, dt);
   pbFollowTo(pos.latlng);
   pbReadout(leg);
   const doneSec = leg.cumDur + pb.lt;
@@ -558,7 +603,8 @@ function pbInit(dayKey) {
   isolated = null;          // playback and an isolated trip are never both live
   pb = { day: dayKey, legs, driveSec, distMi, li: 0, lt: 0,
          mult: userMult || PB_DEFAULT_MULT, spd: 0,
-         playing: false, done: false, drawn: 0, segDrawn: 0, last: null, idleUntil: 0, dt: 0 };
+         playing: false, done: false, drawn: 0, segDrawn: 0, last: null, idleUntil: 0, dt: 0,
+         look: { x: 0, y: 0 } };
   pbSyncMultBtns(pb.mult);
   if (gauge) gauge.box.classList.add('on');
   pb.rend = L.canvas({ padding: 0.5 });     // laid-down trail (redrawn only as segments land)
@@ -974,6 +1020,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=48"></script>
+<script src="assets/nav.js?v=50"></script>
 </body>
 </html>
