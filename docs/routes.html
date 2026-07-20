@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=55">
+<link rel="stylesheet" href="assets/style.css?v=56">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -50,12 +50,14 @@
       title="When a day finishes, roll straight on to the next one"><span aria-hidden="true">⟳</span> Continuous</button>
     <input type="range" id="pbSeek" min="0" max="1000" value="0" aria-label="Playback position">
     <span class="spd" id="pbSpd" role="group" aria-label="Playback speed (multiple of real time)">
-      <button data-s="1" type="button" title="Real time — one second per second">1×</button><button data-s="60" type="button" title="1 minute of driving per second">60×</button><button data-s="300" type="button" title="5 minutes of driving per second">300×</button><button data-s="1200" type="button" title="20 minutes of driving per second">1200×</button>
+      <button data-s="1" type="button" title="Real time — one second per second">1×</button><button data-s="5" type="button" title="5 seconds of driving per second — readable at street level">5×</button><button data-s="10" type="button" title="10 seconds of driving per second">10×</button><button data-s="60" type="button" title="1 minute of driving per second — best below street zoom">60×</button><button data-s="300" type="button" title="5 minutes of driving per second">300×</button><button data-s="1200" type="button" title="20 minutes of driving per second">1200×</button>
     </span>
     <span class="rd" id="pbRead"></span>
     <span class="pbnote">Played at the speed actually recorded by the GPS — traffic, stops and motorway are all real, and
       the clock shows the true time of day. Speeds are true multiples of real time: <b>1× is one second of driving per
-      second</b>, 60× is a minute per second. Idle waits between jobs are skipped.</span>
+      second</b>, 5× is five, 60× is a minute per second. The map is framed at street level, where <b>5× is about as
+      fast as the eye can follow</b> — the higher multiples are for skimming, and read better zoomed out.
+      Idle waits between jobs are skipped.</span>
   </div>
   <div id="map"></div>
 
@@ -84,7 +86,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=55"></script>
+<script src="assets/site.js?v=56"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -354,11 +356,14 @@ function setFollow(on) {
   if (on && pb) pbFollowTo(pb.marker.getLatLng());
 }
 // Speed settings are TRUE multiples of real time: 1x really is one second of
-// driving per second. 60x - a minute of driving per second - is the default:
-// slow enough that traffic, junctions and motorway stretches still read as
-// themselves, rather than auto-scaling to squeeze every day into a minute,
-// which made a long shift and a short one play at wildly different speeds.
-const PB_DEFAULT_MULT = 60;
+// driving per second.
+// The default is tied to the playback ZOOM, because the two are one setting in
+// disguise. At zoom 19 the viewport is 165 m across, so 60x crossed a full
+// screen 3.2 times a second - a strobe. 5x crosses it in about 3.7 s, which is
+// followable at building level. The cost is honest and worth knowing: a full
+// shift takes roughly two hours to play, so continuous day-to-day touring is no
+// longer the point of the feature. Raise this if the zoom ever comes back out.
+const PB_DEFAULT_MULT = 5;
 const IDLE_SKIP = 60;       // gaps longer than this (real seconds) are skipped
 const pbEls = {};
 
@@ -574,10 +579,12 @@ function pbDayIdle(dayKey) {   // idle readout: real driving time, average speed
   const n = legs.filter(l => l.seg === 'trip').length;
   const m = userMult || PB_DEFAULT_MULT;
   pbSyncMultBtns(m);
-  // At a fixed 60x a full shift runs to minutes, not seconds, so say so in the
-  // unit the number actually lands in rather than quoting "630s".
+  // At the slow multiples a full shift runs to hours, so quote it in the unit
+  // the number actually lands in rather than as "7560s" or "126.0 min".
   const secs = driveSec / m;
-  const plays = secs > 90 ? `${(secs / 60).toFixed(1)} min` : `${Math.round(secs)}s`;
+  const plays = secs > 5400 ? `${(secs / 3600).toFixed(1)} h`
+              : secs > 90   ? `${Math.round(secs / 60)} min`
+              : `${Math.round(secs)}s`;
   pbEls.read.innerHTML = `<span style="color:var(--muted)">${n} trips · ${(driveSec / 3600).toFixed(1)} h driving · ` +
     `${distMi.toFixed(0)} mi · avg <b style="color:var(--ink2)">${Math.round(distMi / (driveSec / 3600))}</b> mph — ` +
     `plays in ~${plays} at ${m}×</span>`;
@@ -1078,6 +1085,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=55"></script>
+<script src="assets/nav.js?v=56"></script>
 </body>
 </html>
