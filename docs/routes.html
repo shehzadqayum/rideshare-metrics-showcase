@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=57">
+<link rel="stylesheet" href="assets/style.css?v=58">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -86,7 +86,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=57"></script>
+<script src="assets/site.js?v=58"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -825,7 +825,15 @@ function render(fit) {
     }
   });
   layer.addTo(map);
-  if (fit && feats.length) map.fitBounds(layer.getBounds(), { padding: [30, 30], maxZoom: isolated ? 15 : 13 });
+  // animate:false is load-bearing, not tidiness. An animated fitBounds runs a
+  // ZOOM animation, and Leaflet's _stop() cancels pan animations only — so a
+  // later setView(..., {animate:false}) cannot call it off, and when the
+  // transition ends it snaps the map back to the zoom it was animating toward.
+  // Pressing Play from "All days" does exactly that: the day change fits the
+  // whole day, playback frames it at street level, and a moment later the fit
+  // won. Landing this synchronously means playback's framing is the last word.
+  if (fit && feats.length) map.fitBounds(layer.getBounds(),
+    { padding: [30, 30], maxZoom: isolated ? 15 : 13, animate: false });
   const stats = document.getElementById('stats');
   if (isolated) {
     const t = feats.find(f => f.properties.seg === 'trip') || feats[0];
@@ -1098,6 +1106,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=57"></script>
+<script src="assets/nav.js?v=58"></script>
 </body>
 </html>
