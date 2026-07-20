@@ -60,6 +60,13 @@ svg text { font-family:inherit; }
 @media (max-width:640px){ .fskey .g { grid-template-columns:1fr; } }
 .legend span { display:inline-flex; align-items:center; gap:6px; }
 .sw { width:10px; height:10px; border-radius:3px; display:inline-block; }
+/* Value ramps size to their container instead of a fixed 220px, which overran
+   a narrow panel and clipped the top-of-scale label off the end. */
+.legend .ramp { display:inline-flex; flex-direction:column; gap:2px;
+  width:220px; max-width:100%; flex:0 1 220px; }
+.legend .ramp .bar { display:block; width:100%; height:12px; border-radius:3px; }
+.legend .ramp .sc { display:flex; justify-content:space-between; width:100%;
+  font-size:.66rem; color:var(--muted); }
 /* Day/week playback bar — the "ghost car" retraces a shift while routes build up. */
 .pbar { display:none; align-items:center; gap:10px; flex-wrap:wrap; margin:4px 0 8px; font-size:.8rem; }
 .pbar.on { display:flex; }
@@ -255,9 +262,10 @@ body.rs-maxi-lock { overflow:hidden; }
 .rs-gauge .rows b { color:#16202a; font-weight:650; }
 @media (max-width:760px), (max-height:540px) {
   .rs-gauge { width:112px; padding:6px 8px 7px; }
-  /* "avg from start" plus its value does not fit 96px of inner width, and a
-     wrapped label reads as broken; the shorter form still says which average. */
-  .rs-gauge .lg { display:none; }
+  /* Long-form label halves: dropped where there is no room for them. The
+     gauge's "avg from start" plus its value does not fit 96px of inner width,
+     and a wrapped label reads as broken. */
+  .rs-gauge .lg, .rs-ov .lg { display:none; }
   .rs-gauge .rows { font-size:.65rem; }
   .rs-gauge .mph { font-size:1.25rem; }
 }
@@ -280,7 +288,9 @@ body.rs-maxi-lock { overflow:hidden; }
   .rs-ov .pbar .rd { flex-basis:100%; font-size:.76rem; }
   /* Landscape phones have ~390px of height, so the drawer is capped harder and
      the legend chip stays out of it - see the tr host. */
-  .rs-ov-drawer { max-height:min(34dvh,150px); padding:9px 10px; }
+  /* the drawer carries the legend now as well as the modes, so it needs a
+     little more room; it still scrolls rather than growing without bound */
+  .rs-ov-drawer { max-height:min(42dvh,200px); padding:9px 10px; }
   .rs-ov-drawtog { padding:7px 10px; font-size:.74rem; }
 }
 

@@ -333,7 +333,8 @@ function mapOverlay(map, spec) {
       const draw = L.DomUtil.create('div', 'rs-ov-drawer', wrap);
       const tog = L.DomUtil.create('button', 'rs-ov-drawtog', h);
       tog.type = 'button';
-      tog.textContent = spec.drawerLabel || '⚙ Layers';
+      // innerHTML so a label can carry a .lg span that drops on narrow screens
+      tog.innerHTML = spec.drawerLabel || '⚙ Layers';
       tog.setAttribute('aria-expanded', 'false');
       // Clipped-but-present content stays focusable, so the drawer is inert
       // while closed rather than merely out of sight.
@@ -347,7 +348,10 @@ function mapOverlay(map, spec) {
       // Escape cannot be used to close this: on desktop the map is in NATIVE
       // full screen, where the browser consumes Escape to exit and no handler
       // can prevent it. Closing on a map gesture is the reliable equivalent.
-      map.on('click movestart', () => setDrawer(false));
+      // dragstart, NOT movestart: movestart also fires for programmatic moves,
+      // so a day change (which refits) or a resize settle would shut the panel
+      // under the viewer's hand.
+      map.on('click dragstart', () => setDrawer(false));
       hosts.drawer = { body: draw, nodes: drawerNodes };
     }
     // Without this, dragging the scrubber pans the map underneath and a click

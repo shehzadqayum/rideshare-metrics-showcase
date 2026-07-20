@@ -6,7 +6,7 @@
 <meta name="description" content="Pick any of seven GPS-tracked weeks and see every trip on one map, coloured by four-state, MNHR, earnings per hour or per mile. Click a route to isolate it.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Week deep dive — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=33">
+<link rel="stylesheet" href="assets/style.css?v=35">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 <style>
   .weekbar { position:sticky; top:var(--rsnav-h, 52px); z-index:5; background:var(--page); padding:10px 0 8px;
@@ -29,7 +29,9 @@
   .leaflet-tooltip.rt .r { display:flex; justify-content:space-between; gap:8px; }
   .leaflet-tooltip.rt .r span:last-child { font-variant-numeric:tabular-nums; }
   .mlegend { display:flex; align-items:center; gap:10px; margin:8px 0 2px; font-size:.74rem; color:var(--muted); flex-wrap:wrap; }
-  .mlegend .bar { height:10px; width:180px; border-radius:3px; }
+  /* fluid, not a fixed 180px — in the narrow full-screen panel a fixed width
+     overran its container and clipped the end of the scale */
+  .mlegend .bar { height:10px; width:180px; max-width:100%; flex:0 1 180px; border-radius:3px; }
   .mlegend .hint { margin-left:auto; color:var(--s1); }
   .swatch { display:inline-flex; align-items:center; gap:5px; }
   .swatch i { width:11px; height:11px; border-radius:3px; display:inline-block; }
@@ -99,7 +101,7 @@
   <footer class="site">Data: docs/data/weeks.json — extracted from the pipeline's metrics engine with GPS
   tracks re-derived from the raw GPX logs. Map tiles © OpenStreetMap / CARTO.</footer>
 </main>
-<script src="assets/site.js?v=33"></script>
+<script src="assets/site.js?v=35"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 // One source of truth for the four-state palette: the theme-aware CSS vars
@@ -324,6 +326,6 @@ getJSON('data/weeks.json').then(d => {
   }
 }).catch(dataFail('the week data'));
 </script>
-<script src="assets/nav.js?v=33"></script>
+<script src="assets/nav.js?v=35"></script>
 </body>
 </html>

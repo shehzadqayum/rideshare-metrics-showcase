@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=33">
+<link rel="stylesheet" href="assets/style.css?v=35">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -70,8 +70,8 @@
       waits between jobs are skipped.</li>
       <li><b>Full screen</b> — the ⛶ button top-left fills the screen and every control comes with it,
       as one instrument cluster: day navigation and the player across the foot (the day label opens a
-      picker for all 31 days), the colour modes folding up out of that bar behind <b>⚙ Layers</b>, the
-      legend pinned top-right so it stays readable while a day plays, and a live speedometer bottom-left
+      picker for all 31 days), the colour modes and their legend folding up out of that bar behind
+      <b>⚙ Layers</b> so nothing covers the map, and a live speedometer bottom-left
       showing current speed, the average for the job in hand beside the average for the whole shift so far
       — the gap between them is the unpaid approach — and the true date and time.</li>
     </ul>
@@ -80,7 +80,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=33"></script>
+<script src="assets/site.js?v=35"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -123,20 +123,20 @@ function legend() {
      <span><span class="sw" style="background:#e34948"></span>deadhead</span>`;
   else if (mode === 'service') el.innerHTML = Object.entries(svcColor)
     .map(([k, v]) => `<span><span class="sw" style="background:${v}"></span>${k.toLowerCase().replace('_', ' ')}</span>`).join('');
+  // The ramp is fluid, not a fixed 220px: in a narrow panel the fixed width
+  // overran its container and clipped the top-of-scale label clean off.
   else if (mode === 'speed') el.innerHTML =
-    `<span style="display:inline-flex;flex-direction:column;gap:2px">
-       <span style="width:220px;height:12px;border-radius:3px;background:linear-gradient(to right,` +
+    `<span class="ramp">
+       <span class="bar" style="background:linear-gradient(to right,` +
          `hsl(0,82%,42%),hsl(35,82%,42%),hsl(70,82%,42%),hsl(105,82%,42%),hsl(140,82%,42%))"></span>
-       <span style="display:flex;justify-content:space-between;width:220px;font-size:.66rem;color:var(--muted)">
-         <span>0</span><span>14</span><span>27</span><span>41</span><span>55+ mph</span></span>
+       <span class="sc"><span>0</span><span>14</span><span>27</span><span>41</span><span>55+ mph</span></span>
      </span>
      <span style="color:var(--muted)">speed measured between GPS points — red is crawling, green free-flowing</span>`;
   else el.innerHTML =
-    `<span style="display:inline-flex;flex-direction:column;gap:2px">
-       <span style="width:220px;height:12px;border-radius:3px;background:linear-gradient(to right,` +
+    `<span class="ramp">
+       <span class="bar" style="background:linear-gradient(to right,` +
          `hsl(240,72%,46%),hsl(180,72%,46%),hsl(120,72%,46%),hsl(60,72%,46%),hsl(0,72%,46%))"></span>
-       <span style="display:flex;justify-content:space-between;width:220px;font-size:.66rem;color:var(--muted)">
-         <span>£0</span><span>£1</span><span>£2</span><span>£3</span><span>£4+/mi</span></span>
+       <span class="sc"><span>£0</span><span>£1</span><span>£2</span><span>£3</span><span>£4+/mi</span></span>
      </span>
      <span><span class="sw" style="background:#8a8a85"></span>en-route/unknown</span>`;
 }
@@ -683,7 +683,9 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   // Escape deliberately not wired: on desktop the map is in NATIVE full screen,
   // where the browser consumes Escape to exit and no handler can stop it — so
   // Escape here would drop the viewer out of full screen, not close the picker.
-  map.on('click movestart', () => setPick(false));
+  // dragstart rather than movestart, so the refit that FOLLOWS picking a day
+  // cannot be what dismisses the picker.
+  map.on('click dragstart', () => setPick(false));
 
   function syncStep() {
     const day = sel.value === 'ALL' ? 'All days'
@@ -704,12 +706,15 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   }
   pbar.prepend(step);          // first in the bar: selection precedes transport
   buildPick();
+  // One control surface. The legend used to sit in a pinned top-right panel so
+  // it stayed readable while a day played, but on a phone that panel covered a
+  // third of the map and its fixed-width gradient overran it. Folding it in
+  // with the colour modes it explains keeps the map clear.
   mapOverlay(map, {
     bottom: [pbar],
-    drawer: [document.getElementById('modeBtns'), document.getElementById('stats')],
-    tr: [document.getElementById('legend')],
-    trLabel: 'Legend',
-    drawerLabel: '⚙ Layers',
+    drawer: [document.getElementById('modeBtns'), document.getElementById('legend'),
+             document.getElementById('stats')],
+    drawerLabel: '⚙ Layers<span class="lg"> &amp; legend</span>',
   });
   gauge = pbGaugeBuild(map.getContainer());
 
@@ -776,6 +781,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=33"></script>
+<script src="assets/nav.js?v=35"></script>
 </body>
 </html>
