@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=40">
+<link rel="stylesheet" href="assets/style.css?v=41">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -45,7 +45,7 @@
   <div class="pbar" id="pbar">
     <button class="pbtn" id="pbBtn" type="button">▶ Play day</button>
     <button class="ftog" id="pbFollow" type="button" aria-pressed="false"
-      title="Keep the car centred — the map moves with it">⌖ Follow</button>
+      title="Keep the car centred — the map moves with it"><span aria-hidden="true">⌖</span> Follow</button>
     <input type="range" id="pbSeek" min="0" max="1000" value="0" aria-label="Playback position">
     <span class="spd" id="pbSpd" role="group" aria-label="Playback speed (multiple of real time)">
       <button data-s="1" type="button" title="Real time — one second per second">1×</button><button data-s="60" type="button" title="1 minute of driving per second">60×</button><button data-s="300" type="button" title="5 minutes of driving per second">300×</button><button data-s="1200" type="button" title="20 minutes of driving per second">1200×</button>
@@ -82,7 +82,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=40"></script>
+<script src="assets/site.js?v=41"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -153,7 +153,20 @@ function legend() {
 let pb = null, userMult = null;   // userMult: a speed the viewer chose, kept across days
 // Follow is the DEFAULT view mode: the replay is the point of this page, and
 // watching it from a fixed frame means watching a dot cross a static picture.
-let follow = true, ptrHeld = false;
+let follow = true;
+// A SET of live pointer ids, not a boolean. With a boolean, a second finger's
+// pointerup cleared the flag while the first was still on the glass — and a
+// pointerup the OS eats (alt-tab with the button down) left it stuck. Either
+// way the map becomes movable mid-gesture, which is the teleport bug exactly.
+const ptrs = new Set();
+// How far the car may drift from centre before the map is pulled back, as a
+// fraction of the viewport. NOT zero: panBy fires moveend, and every moveend
+// makes Leaflet's canvas renderer re-clip and redraw every path it holds — so
+// recentring on literally every frame put a full redraw of the whole laid-down
+// trail into each of 60 frames a second, which is precisely what splitting the
+// trail and the live edge across two canvases was meant to avoid. At 12% the
+// car still reads as centred and the redraw happens a couple of times a second.
+const FOLLOW_SLACK = 0.12;
 
 // Follow mode: the map pans under the car to keep it centred.
 //
@@ -164,12 +177,23 @@ let follow = true, ptrHeld = false;
 // dangerous possible version of that, so follow stands down for the whole time a
 // pointer is held and resumes on release.
 function pbFollowTo(latlng) {
-  if (!follow || ptrHeld) return;
+  if (!follow || ptrs.size) return;
+  if (pb && pb.scrubbing) return;          // a scrub is the viewer driving, not the car
   if (map.dragging && map.dragging.moving()) return;
-  const d = map.latLngToContainerPoint(latlng).subtract(map.getSize().divideBy(2));
-  // panBy translates the pane. setView would fire a viewreset and force every
-  // canvas layer to redraw — far too much for something called every frame.
-  if (Math.abs(d.x) > 1 || Math.abs(d.y) > 1) map.panBy(d, { animate: false });
+  // panBy with animate:false does NOT call map._stop(), so it cannot cancel an
+  // animation already running — it just writes a pane position the animation's
+  // next step overwrites from its own captured start. Re-engaging follow during
+  // an inertia coast, or arrowing the map, therefore became a tug of war.
+  if (map._panAnim && map._panAnim._inProgress) return;
+  const size = map.getSize();
+  const d = map.latLngToContainerPoint(latlng).subtract(size.divideBy(2));
+  // A continuously sliding map is a vestibular trigger, and follow is the only
+  // thing on this site that moves on its own. Under reduce, let the car cross
+  // most of the viewport and correct in one discrete step instead.
+  const slack = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.42 : FOLLOW_SLACK;
+  if (Math.abs(d.x) <= size.x * slack && Math.abs(d.y) <= size.y * slack) return;
+  // panBy translates the pane. setView would fire a viewreset on top.
+  map.panBy(d, { animate: false });
 }
 function setFollow(on) {
   follow = on;
@@ -471,6 +495,7 @@ function pbInit(dayKey) {
   // An explicitly chosen speed sticks across day changes — with day navigation
   // now in the bar you switch days constantly, and having 1x silently revert
   // to the auto-picked multiple every time would be maddening.
+  isolated = null;          // playback and an isolated trip are never both live
   pb = { day: dayKey, legs, driveSec, distMi, li: 0, lt: 0,
          mult: userMult || PB_DEFAULT_MULT, spd: 0,
          playing: false, done: false, drawn: 0, segDrawn: 0, last: null, idleUntil: 0, dt: 0 };
@@ -664,6 +689,9 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
     { attribution: '© OpenStreetMap, © CARTO', maxZoom: 19 }).addTo(map);
   // click empty map to clear an isolated trip (ignore the click that did the isolating)
   map.on('click', () => {
+    // During playback there is no interactive layer to clear, and rebuilding
+    // one would drop thousands of canvas polylines on top of the running replay.
+    if (pb) return;
     if (isolated && Date.now() - lastFeatureClick > 60) { isolated = null; render(false); }
   });
   const pbar = document.getElementById('pbar');
@@ -795,16 +823,37 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   // ---- follow mode ----
   // The pointer guard is the load-bearing part: while the button is down,
   // pbFollowTo refuses to touch the map (see the note on the function).
-  map.getContainer().addEventListener('pointerdown', () => { ptrHeld = true; }, true);
-  ['pointerup', 'pointercancel'].forEach(e =>
-    window.addEventListener(e, () => { ptrHeld = false; }, true));
-  window.addEventListener('blur', () => { ptrHeld = false; });
+  map.getContainer().addEventListener('pointerdown', e => {
+    // Chrome ADOPTED into the map — the play bar in full screen — is not the
+    // map. Counting a scrubber drag as a held map pointer froze follow with no
+    // frame coming to release it (pbSeek pauses), stranding the car off screen,
+    // and made full screen behave unlike windowed for no reason.
+    if (e.target.closest && e.target.closest('.rs-ov')) return;
+    ptrs.add(e.pointerId);
+  }, true);
+  const ptrGone = e => {
+    ptrs.delete(e.pointerId);
+    // Re-assert here rather than waiting for the next animation frame: after a
+    // scrub, playback is paused, so there is no next frame to recover on.
+    if (!ptrs.size && follow && pb) pbFollowTo(pb.marker.getLatLng());
+  };
+  ['pointerup', 'pointercancel'].forEach(t => window.addEventListener(t, ptrGone, true));
+  // Recovery for a pointerup that never arrives (alt-tab with the button down),
+  // which would otherwise leave follow locked off for good.
+  window.addEventListener('blur', () => ptrs.clear());
+  document.addEventListener('visibilitychange', () => { if (document.hidden) ptrs.clear(); });
   document.getElementById('pbFollow').addEventListener('click', () => setFollow(!follow));
+  // Arrow keys pan the map through Leaflet's Keyboard handler and never fire
+  // dragstart, so without this the map could not be moved from the keyboard at
+  // all while following — every press was undone on the next frame.
+  map.getContainer().addEventListener('keydown', e => {
+    if (follow && /^Arrow/.test(e.key)) setFollow(false);
+  });
   setFollow(follow);            // reflect the default-on state on the button
   // Dragging the map means "I want to look somewhere else" — disengage, the way
   // navigation apps do, rather than fighting the viewer for the viewport. The
-  // drag itself proceeds untouched, because ptrHeld has already stood follow
-  // down for the duration of the gesture.
+  // drag itself proceeds untouched, because the live-pointer set has already
+  // stood follow down for the duration of the gesture.
   // Deliberately ONLY dragstart: zooming is a framing change, not a decision to
   // look elsewhere, so wheel and pinch zoom leave follow engaged and the car
   // stays centred at the new scale.
@@ -844,6 +893,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=40"></script>
+<script src="assets/nav.js?v=41"></script>
 </body>
 </html>
