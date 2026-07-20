@@ -6,7 +6,7 @@
 <meta name="description" content="Seventeen weeks of audited Uber earnings, collected automatically from the driver portal by browser automation and reconciled trip by trip.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Earnings &amp; portal automation — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=54">
+<link rel="stylesheet" href="assets/style.css?v=55">
 </head>
 <body>
 <main class="wrap" id="rsmain">
@@ -42,7 +42,7 @@
   <footer class="site">Tool: browser automation (Node.js) with automated sync, tabulation, CSV export and
   statement audit; 23 development checkpoints, tested with Jest.</footer>
 </main>
-<script src="assets/site.js?v=54"></script>
+<script src="assets/site.js?v=55"></script>
 <script>
 getJSON('data/trips.json').then(t => {
   const w = t.weekly;
@@ -60,6 +60,6 @@ getJSON('data/trips.json').then(t => {
     '</table>';
 }).catch(dataFail('the earnings data'));
 </script>
-<script src="assets/nav.js?v=54"></script>
+<script src="assets/nav.js?v=55"></script>
 </body>
 </html>
