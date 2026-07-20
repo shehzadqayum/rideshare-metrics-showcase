@@ -179,7 +179,7 @@ body.rs-maxi-lock { overflow:hidden; }
 .rs-ov-bottom > .pbar { flex:1; min-width:0; order:1; }
 .rs-ov-tr { top:12px; right:12px; width:max-content; max-width:min(42vw,330px);
   padding:9px 12px; border-radius:10px; max-height:calc(100% - 90px); overflow:auto; }
-.rs-ov-on .leaflet-bottom { margin-bottom:var(--rsov-b,0); }
+.rs-ov-on .leaflet-bottom { margin-bottom:var(--rsov-b,0); transition:margin-bottom .22s ease; }
 /* A control face has to read as a control against tiles, which the page's
    near-invisible border cannot do; and the "on" state becomes a solid chip
    because a border tint is not legible at a glance over a moving map. */
@@ -242,7 +242,10 @@ body.rs-maxi-lock { overflow:hidden; }
    windowed and full screen, holds nothing focusable, and pointer-events:none
    lets every drag and click pass straight through to the map. --rsov-b is the
    play bar's height (0 when not full screen), so it rides clear automatically. */
+/* transition matches the drawer's, so the gauge rides up with it rather than
+   jumping once the panel has finished opening */
 .rs-gauge { position:absolute; left:10px; bottom:calc(var(--rsov-b, 0px) + 10px);
+  transition:bottom .22s ease;
   z-index:900; display:none; pointer-events:none; width:150px; padding:8px 10px 9px;
   background:#f7f4ee; background:rgba(247,244,238,.94);
   -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
@@ -250,6 +253,8 @@ body.rs-maxi-lock { overflow:hidden; }
   box-shadow:0 2px 18px rgba(24,34,44,.26); color:#16202a; color-scheme:light;
   font-family:system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.35; }
 .rs-gauge.on { display:block; }
+/* no room left above an open drawer on a short screen — see lift() in site.js */
+.rs-squeeze .rs-gauge.on { display:none; }
 .rs-gauge svg { width:100%; height:auto; display:block; }
 .rs-gauge .mph { font-size:1.45rem; font-weight:650; font-variant-numeric:tabular-nums;
   letter-spacing:-.02em; }
@@ -288,8 +293,6 @@ body.rs-maxi-lock { overflow:hidden; }
   .rs-ov .pbar .rd { flex-basis:100%; font-size:.76rem; }
   /* Landscape phones have ~390px of height, so the drawer is capped harder and
      the legend chip stays out of it - see the tr host. */
-  /* the drawer carries the legend now as well as the modes, so it needs a
-     little more room; it still scrolls rather than growing without bound */
   .rs-ov-drawer { max-height:min(42dvh,200px); padding:9px 10px; }
   .rs-ov-drawtog { padding:7px 10px; font-size:.74rem; }
 }

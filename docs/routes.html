@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=35">
+<link rel="stylesheet" href="assets/style.css?v=37">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -80,7 +80,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=35"></script>
+<script src="assets/site.js?v=37"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -150,10 +150,11 @@ function legend() {
 // compressed, and the clock shows the true time of day.
 let pb = null, userMult = null;   // userMult: a speed the viewer chose, kept across days
 // Speed settings are TRUE multiples of real time: 1x really is one second of
-// driving per second. Shift driving time ranges from under an hour to ten, so
-// the default is the slowest multiple that still plays the day inside a minute
-// - honest label, watchable length.
-const PB_MULTS = [1, 60, 300, 1200];
+// driving per second. 60x - a minute of driving per second - is the default:
+// slow enough that traffic, junctions and motorway stretches still read as
+// themselves, rather than auto-scaling to squeeze every day into a minute,
+// which made a long shift and a short one play at wildly different speeds.
+const PB_DEFAULT_MULT = 60;
 const IDLE_SKIP = 60;       // gaps longer than this (real seconds) are skipped
 const pbEls = {};
 
@@ -304,10 +305,6 @@ function pbPosInLeg(leg, lt) {   // interpolate [lat,lng] at lt seconds into the
   return { latlng: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], j, span, a, b };
 }
 function pbProgress() { return pb ? (pb.legs[pb.li].cumDur + pb.lt) / pb.driveSec : 0; }
-function pbDefaultMult(driveSec) {
-  for (const m of PB_MULTS) if (driveSec / m <= 60) return m;
-  return PB_MULTS[PB_MULTS.length - 1];
-}
 function pbSyncMultBtns(m) {
   document.querySelectorAll('#pbSpd button').forEach(x => x.classList.toggle('on', +x.dataset.s === m));
 }
@@ -369,11 +366,15 @@ function pbReadout(leg) {
 function pbDayIdle(dayKey) {   // idle readout: real driving time, average speed, and what play will cost
   const { driveSec, distMi, legs } = dayLegs(dayKey);
   const n = legs.filter(l => l.seg === 'trip').length;
-  const m = pbDefaultMult(driveSec);
+  const m = userMult || PB_DEFAULT_MULT;
   pbSyncMultBtns(m);
+  // At a fixed 60x a full shift runs to minutes, not seconds, so say so in the
+  // unit the number actually lands in rather than quoting "630s".
+  const secs = driveSec / m;
+  const plays = secs > 90 ? `${(secs / 60).toFixed(1)} min` : `${Math.round(secs)}s`;
   pbEls.read.innerHTML = `<span style="color:var(--muted)">${n} trips · ${(driveSec / 3600).toFixed(1)} h driving · ` +
     `${distMi.toFixed(0)} mi · avg <b style="color:var(--ink2)">${Math.round(distMi / (driveSec / 3600))}</b> mph — ` +
-    `plays in ~${Math.round(driveSec / m)}s at ${m}×</span>`;
+    `plays in ~${plays} at ${m}×</span>`;
 }
 function pbBtnLabel() {
   const day = document.getElementById('daySel').value;
@@ -440,7 +441,7 @@ function pbInit(dayKey) {
   // now in the bar you switch days constantly, and having 1x silently revert
   // to the auto-picked multiple every time would be maddening.
   pb = { day: dayKey, legs, driveSec, distMi, li: 0, lt: 0,
-         mult: userMult || pbDefaultMult(driveSec), spd: 0,
+         mult: userMult || PB_DEFAULT_MULT, spd: 0,
          playing: false, done: false, drawn: 0, segDrawn: 0, last: null, idleUntil: 0, dt: 0 };
   pbSyncMultBtns(pb.mult);
   if (gauge) gauge.box.classList.add('on');
@@ -710,13 +711,14 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   // it stayed readable while a day played, but on a phone that panel covered a
   // third of the map and its fixed-width gradient overran it. Folding it in
   // with the colour modes it explains keeps the map clear.
+  gauge = pbGaugeBuild(map.getContainer());   // built first, so the overlay can keep it clear
   mapOverlay(map, {
     bottom: [pbar],
     drawer: [document.getElementById('modeBtns'), document.getElementById('legend'),
              document.getElementById('stats')],
     drawerLabel: '⚙ Layers<span class="lg"> &amp; legend</span>',
+    bottomLeft: gauge.box,
   });
-  gauge = pbGaugeBuild(map.getContainer());
 
   // Speed colouring is per-segment; across all 31 days that is ~27k segments,
   // so it is offered for a single day only.
@@ -781,6 +783,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=35"></script>
+<script src="assets/nav.js?v=37"></script>
 </body>
 </html>

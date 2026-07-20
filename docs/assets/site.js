@@ -343,6 +343,7 @@ function mapOverlay(map, spec) {
         h.classList.toggle('draw-open', on);
         tog.setAttribute('aria-expanded', String(on));
         draw.inert = !on;
+        lift();          // the gauge and attribution ride above the open drawer
       };
       L.DomEvent.on(tog, 'click', () => setDrawer(!h.classList.contains('draw-open')));
       // Escape cannot be used to close this: on desktop the map is in NATIVE
@@ -361,10 +362,29 @@ function mapOverlay(map, spec) {
     if (nodes.length) hosts[k] = { body, nodes };
   });
 
-  // Leaflet puts the tile attribution bottom-right, exactly where the player
-  // bar goes. The licences have to stay legible, so lift that corner clear.
-  const lift = () => el.style.setProperty('--rsov-b',
-    (hosts.bottom ? hosts.bottom.body.offsetHeight : 0) + 'px');
+  // How much of the foot of the map is occupied by chrome. Everything anchored
+  // to the bottom reads this: the tile attribution (which Leaflet puts exactly
+  // where the player bar goes, and whose licences must stay legible) and the
+  // speedometer. An OPEN drawer stands above the bar, so it counts too -
+  // otherwise expanding it covers the gauge.
+  let blH = 0;                 // last known height of the bottom-left widget
+  const lift = () => {
+    const bottom = hosts.bottom && hosts.bottom.body;
+    let h = bottom ? bottom.offsetHeight : 0;
+    if (h && hosts.drawer && bottom.classList.contains('draw-open')) {
+      h += hosts.drawer.body.offsetHeight;
+    }
+    el.style.setProperty('--rsov-b', h + 'px');
+    // spec.bottomLeft (the speedometer) rides on --rsov-b, so it steps up over
+    // an open drawer by itself. On a short screen there is eventually no room
+    // to step into, and it would slide off the top - so measure and let it hide
+    // for as long as the drawer is open. Its height is cached from a moment it
+    // was visible, otherwise hiding it would zero the measurement and unhide it.
+    if (spec.bottomLeft) {
+      if (!el.classList.contains('rs-squeeze')) blH = spec.bottomLeft.offsetHeight || blH;
+      el.classList.toggle('rs-squeeze', blH > 0 && h + blH + 20 > el.clientHeight);
+    }
+  };
 
   function adopt(on) {
     if (on === el.classList.contains('rs-ov-on')) return;
