@@ -409,6 +409,14 @@ function mapOverlay(map, spec) {
   }
 
   map.on('rs:full', e => adopt(e.full));
-  if (window.ResizeObserver && hosts.bottom) new ResizeObserver(lift).observe(hosts.bottom.body);
+  // Both are observed. The drawer is absolutely positioned, so its height does
+  // NOT change the bar's offsetHeight - switching colour mode swaps the legend
+  // for a taller or shorter one and the bar never resizes, so watching only the
+  // bar left --rsov-b stale and the gauge stranded behind the panel.
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(lift);
+    if (hosts.bottom) ro.observe(hosts.bottom.body);
+    if (hosts.drawer) ro.observe(hosts.drawer.body);
+  }
   return { adopt, setDrawer };
 }
