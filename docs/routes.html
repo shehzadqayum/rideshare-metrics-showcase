@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=41">
+<link rel="stylesheet" href="assets/style.css?v=42">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -46,6 +46,8 @@
     <button class="pbtn" id="pbBtn" type="button">▶ Play day</button>
     <button class="ftog" id="pbFollow" type="button" aria-pressed="false"
       title="Keep the car centred — the map moves with it"><span aria-hidden="true">⌖</span> Follow</button>
+    <button class="ftog" id="pbCont" type="button" aria-pressed="true"
+      title="When a day finishes, roll straight on to the next one"><span aria-hidden="true">⟳</span> Continuous</button>
     <input type="range" id="pbSeek" min="0" max="1000" value="0" aria-label="Playback position">
     <span class="spd" id="pbSpd" role="group" aria-label="Playback speed (multiple of real time)">
       <button data-s="1" type="button" title="Real time — one second per second">1×</button><button data-s="60" type="button" title="1 minute of driving per second">60×</button><button data-s="300" type="button" title="5 minutes of driving per second">300×</button><button data-s="1200" type="button" title="20 minutes of driving per second">1200×</button>
@@ -82,7 +84,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=41"></script>
+<script src="assets/site.js?v=42"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -154,19 +156,26 @@ let pb = null, userMult = null;   // userMult: a speed the viewer chose, kept ac
 // Follow is the DEFAULT view mode: the replay is the point of this page, and
 // watching it from a fixed frame means watching a dot cross a static picture.
 let follow = true;
+// Continuous play: a finished day rolls on to the next one, so the whole
+// capture period can be watched end to end without touching anything.
+let contPlay = true, contTimer = null;
+const CONT_HOLD = 1600;   // ms the completed day is left on screen before moving on
 // A SET of live pointer ids, not a boolean. With a boolean, a second finger's
 // pointerup cleared the flag while the first was still on the glass — and a
 // pointerup the OS eats (alt-tab with the button down) left it stuck. Either
 // way the map becomes movable mid-gesture, which is the teleport bug exactly.
 const ptrs = new Set();
-// How far the car may drift from centre before the map is pulled back, as a
-// fraction of the viewport. NOT zero: panBy fires moveend, and every moveend
-// makes Leaflet's canvas renderer re-clip and redraw every path it holds — so
-// recentring on literally every frame put a full redraw of the whole laid-down
-// trail into each of 60 frames a second, which is precisely what splitting the
-// trail and the live edge across two canvases was meant to avoid. At 12% the
-// car still reads as centred and the redraw happens a couple of times a second.
-const FOLLOW_SLACK = 0.12;
+// The dead-zone is sized from the ROUTE, not from a fixed fraction of the
+// viewport. Every panBy fires a moveend, and every moveend makes Leaflet's
+// canvas renderer re-clip and redraw every path it holds — so the only way to
+// pay nothing is to not pan at all. Because the day is framed one zoom step
+// out from its fitting zoom, the whole route occupies at most half the
+// viewport; making the zone as large as the route means the car can never
+// leave it, and at the default framing follow costs exactly zero redraws.
+// It only starts panning once the viewer zooms in far enough that the route no
+// longer fits — which is the only time following is any use.
+const FOLLOW_CAP = 0.45;   // ceiling, so a deep zoom still tracks the car
+const FOLLOW_MIN = 0.12;   // floor, for the moment before a route exists
 
 // Follow mode: the map pans under the car to keep it centred.
 //
@@ -187,11 +196,23 @@ function pbFollowTo(latlng) {
   if (map._panAnim && map._panAnim._inProgress) return;
   const size = map.getSize();
   const d = map.latLngToContainerPoint(latlng).subtract(size.divideBy(2));
+  // Size the zone to the route's own half-extent at the current zoom, so at the
+  // default framing the car is inside it for the whole day and nothing pans.
+  // Two projections per frame; no allocation worth speaking of.
+  let sx = size.x * FOLLOW_MIN, sy = size.y * FOLLOW_MIN;
+  try {
+    const b = pb.ghost.getBounds();
+    const nw = map.latLngToContainerPoint(b.getNorthWest());
+    const se = map.latLngToContainerPoint(b.getSouthEast());
+    sx = Math.max(sx, Math.abs(se.x - nw.x) / 2 + 8);
+    sy = Math.max(sy, Math.abs(se.y - nw.y) / 2 + 8);
+  } catch (e) {}
   // A continuously sliding map is a vestibular trigger, and follow is the only
-  // thing on this site that moves on its own. Under reduce, let the car cross
-  // most of the viewport and correct in one discrete step instead.
-  const slack = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.42 : FOLLOW_SLACK;
-  if (Math.abs(d.x) <= size.x * slack && Math.abs(d.y) <= size.y * slack) return;
+  // thing on this site that moves on its own, so reduce widens the ceiling too.
+  const cap = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.48 : FOLLOW_CAP;
+  sx = Math.min(sx, size.x * cap);
+  sy = Math.min(sy, size.y * cap);
+  if (Math.abs(d.x) <= sx && Math.abs(d.y) <= sy) return;
   // panBy translates the pane. setView would fire a viewreset on top.
   map.panBy(d, { animate: false });
 }
@@ -440,13 +461,22 @@ function pbBtnLabel() {
     else pbDayIdle(day);
   }
 }
-function pbPickDay() {         // the richest day makes the best showcase
-  let best = null, bn = -1;
-  Object.keys(DATA.days).forEach(k => {
-    const c = new Set(DATA.days[k].features.map(f => f.properties.trip)).size;
-    if (c > bn) { bn = c; best = k; }
-  });
-  return best;
+// The tour starts at the FIRST captured day and runs forward from there, so
+// pressing play from "All days" begins at the beginning rather than dropping
+// the viewer into an arbitrary midpoint.
+function pbPickDay() { return Object.keys(DATA.days).sort()[0]; }
+
+// Roll on to the next day once one finishes, after a beat long enough to take
+// in the completed route.
+function pbNextDay() {
+  clearTimeout(contTimer);
+  contTimer = setTimeout(() => {
+    const sel = document.getElementById('daySel');
+    if (!contPlay || sel.selectedIndex >= sel.options.length - 1) return;
+    sel.selectedIndex += 1;
+    sel.dispatchEvent(new Event('change'));   // wasPlaying is already false here
+    pbPlay();
+  }, CONT_HOLD);
 }
 function pbFlashIdle(gapSec) {
   pbEls.read.innerHTML = `<span style="color:var(--warn)">⏭ waited ${Math.round(gapSec / 60)} min for the next job</span>`;
@@ -465,7 +495,9 @@ function pbTick(ts) {
     pb.lt -= pb.legs[pb.li].dur; pb.li++;
     if (pb.li >= pb.legs.length) {            // end of the day
       pb.li = pb.legs.length - 1; pb.lt = pb.legs[pb.li].dur; pb.playing = false; pb.done = true;
-      pbFrameRender(); pbBtnLabel(); return;
+      pbFrameRender(); pbBtnLabel();
+      if (contPlay) pbNextDay();
+      return;
     }
     if (pb.legs[pb.li].gap > 0) {             // hybrid: skip the wait, flash it, jump the car
       pbFrameRender();                        // lay down the leg just finished
@@ -526,6 +558,7 @@ function pbInit(dayKey) {
   return true;
 }
 function pbTeardown(restore) {
+  clearTimeout(contTimer);        // picking a day by hand cancels a pending roll-on
   if (pb) {
     if (pb.raf) cancelAnimationFrame(pb.raf);
     [pb.ghost, pb.trail, pb.partial, pb.halo, pb.marker].forEach(l => l && map.removeLayer(l));
@@ -549,7 +582,10 @@ function pbPlay() {
   pb.playing = true; pb.last = null; pbBtnLabel();
   pb.raf = requestAnimationFrame(pbTick);
 }
-function pbPause() { if (pb) { pb.playing = false; if (pb.raf) cancelAnimationFrame(pb.raf); pbBtnLabel(); } }
+function pbPause() {
+  clearTimeout(contTimer);        // a deliberate pause outranks a pending roll-on
+  if (pb) { pb.playing = false; if (pb.raf) cancelAnimationFrame(pb.raf); pbBtnLabel(); }
+}
 function pbToggle() {
   if (pb) { pb.playing ? pbPause() : pbPlay(); return; }
   const sel = document.getElementById('daySel');
@@ -843,6 +879,15 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   window.addEventListener('blur', () => ptrs.clear());
   document.addEventListener('visibilitychange', () => { if (document.hidden) ptrs.clear(); });
   document.getElementById('pbFollow').addEventListener('click', () => setFollow(!follow));
+  const contBtn = document.getElementById('pbCont');
+  const setCont = on => {
+    contPlay = on;
+    contBtn.classList.toggle('on', on);
+    contBtn.setAttribute('aria-pressed', String(on));
+    if (!on) clearTimeout(contTimer);
+  };
+  contBtn.addEventListener('click', () => setCont(!contPlay));
+  setCont(contPlay);            // reflect the default-on state on the button
   // Arrow keys pan the map through Leaflet's Keyboard handler and never fire
   // dragstart, so without this the map could not be moved from the keyboard at
   // all while following — every press was undone on the next frame.
@@ -893,6 +938,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=41"></script>
+<script src="assets/nav.js?v=42"></script>
 </body>
 </html>
