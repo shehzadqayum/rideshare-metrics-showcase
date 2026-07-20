@@ -82,41 +82,8 @@ def area(addr):
 # (it misses whole GPS weeks and the 11/13 Feb polyline-format days). routes.json is
 # now produced by scripts/build_routes_from_gpx.py, which re-extracts every trip's
 # route directly from the raw GPX tracker logs. Run that script for routes; this one
-# only builds trips/metrics/demand/charging. The extract_geojson/area helpers above
+# only builds trips/metrics/charging. The extract_geojson/area helpers above
 # are retained for reference.
-
-# ---------------------------------------------------------------- demand (Sentinel snapshot)
-d = json.load(open(BASE + '/uber_surge/data/live.json', encoding='utf-8'))
-src = d.get('sources', {}); tfl = src.get('tfl', {})
-def g(k): return tfl.get(k, {}).get('data') or {}
-ls = g('line_status')
-lines = []
-for l in ls.get('lines', []):
-    sts = l.get('lineStatuses') or []
-    lines.append({'name': l.get('name'), 'mode': l.get('modeName'),
-                  'status': sts[0].get('statusSeverityDescription', 'Good Service') if sts else 'Good Service',
-                  'reason': ((sts[0].get('reason') or '')[:200]) if sts else ''})
-rd = g('road_disruptions'); sd = g('station_disruptions'); ma = g('mode_arrivals')
-fb = src.get('football', {}).get('fixtures', {}).get('data', {})
-tm = src.get('ticketmaster', {}).get('events', {}).get('data', {})
-cur = (src.get('metoffice', {}).get('hourly', {}).get('data') or {}).get('current') or {}
-write('demand.json', {
-    'timestamp': d.get('timestamp'),
-    'network_health_pct': ls.get('network_health_pct'),
-    'disrupted_lines': ls.get('disrupted_lines'), 'total_lines': ls.get('total_lines'),
-    'lines': lines,
-    'road_total': rd.get('total'),
-    'road_serious': [{'location': x.get('location'), 'category': x.get('category'),
-                      'comments': (x.get('comments') or '')[:160]}
-                     for x in (rd.get('by_severity', {}).get('Serious') or [])[:6]],
-    'station_issues_total': sd.get('total'), 'station_closures': sd.get('closure_count'),
-    'arrivals_tracked': ma.get('total_arrivals'), 'arrival_stations': ma.get('total_stations'),
-    'football_total': fb.get('total_matches'),
-    'football_london': [{'home': m.get('home_team'), 'away': m.get('away_team'),
-                         'comp': m.get('competition')} for m in (fb.get('london_matches') or [])],
-    'events_total': tm.get('total'),
-    'weather_temp': cur.get('temperature'),
-    'tfl_endpoints': len(tfl), 'rail_feeds': len(src.get('national_rail', {}))})
 
 # ---------------------------------------------------------------- charging
 d = json.load(open(BASE + '/uber_charging/report/charging_report.json', encoding='utf-8'))

@@ -217,6 +217,13 @@ function dataFail(file, scope) {
 /* Shared map behaviour, so every map on the site works the same way.
    Called after Leaflet has loaded (site.js is deliberately loaded before it),
    hence the late reference to the global L. */
+// TWINNED IMPLEMENTATION — deliberately not shared. The generated dashboards
+// have their own copy of the full-screen behaviour below, injected by
+// scripts/patch_dashboards.py (the MAPFX block / SHELL). They cannot reuse this
+// one: the map-bearing dashboard (cnhr) does not load site.js, and the page that
+// does load it (surge_report) has no map. Keep the two in step by hand; a forced
+// merge would put this file's top-level `const css/fmt/card` onto a generated
+// page and risk a redeclaration crash. See scripts/patch_dashboards.py.
 function mapExtras(map) {
   map.scrollWheelZoom.enable();
 

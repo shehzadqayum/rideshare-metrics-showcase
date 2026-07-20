@@ -1,0 +1,21 @@
+<!--TIDY-->
+<script>
+(function(){
+  function tidy(){
+    // the generated legend still advertises the old orange/green/grey scheme;
+    // the live legend above the map replaces it
+    document.querySelectorAll('.map-legend').forEach(function(n){ n.remove(); });
+    // the map is expanded by default, so the hint must not say 'click to expand'
+    var tog = document.querySelector('.map-toggle');
+    var body = document.getElementById('map-body');
+    if (tog && body){
+      var hint = tog.querySelector(':scope > span');
+      if (hint) hint.textContent = (body.style.display === 'none') ? 'click to expand' : 'hide';
+    }
+  }
+  document.addEventListener('click', function(){ setTimeout(tidy, 80); }, true);
+  window.addEventListener('load', function(){ setTimeout(tidy, 160); });
+  setTimeout(tidy, 0); setTimeout(tidy, 400);
+})();
+</script>
+<!--/TIDY-->

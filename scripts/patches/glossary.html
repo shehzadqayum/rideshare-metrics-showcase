@@ -1,0 +1,85 @@
+<!--GLOSSARY-->
+<style>
+  #glossary{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin:1.2rem 0;overflow:hidden}
+  #glossary .gh{display:flex;justify-content:space-between;align-items:center;padding:.85rem 1.1rem;cursor:pointer;user-select:none}
+  #glossary .gh b{font-size:.95rem}
+  #glossary .gh span{color:var(--text-muted);font-size:.78rem}
+  #glossary .gb{padding:0 1.1rem 1.1rem;display:block}
+  #glossary h5{margin:1rem 0 .45rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)}
+  #glossary table{width:100%;border-collapse:collapse;font-size:.82rem}
+  #glossary td{padding:.3rem .6rem .3rem 0;border-bottom:1px solid var(--border);vertical-align:top}
+  #glossary td:first-child{width:120px;white-space:nowrap;font-family:ui-monospace,Consolas,monospace;color:var(--accent);font-weight:600}
+  #glossary td:nth-child(2){color:var(--text-muted)}
+  #glossary .lead{font-size:.86rem;color:var(--text-muted);line-height:1.6;margin:.3rem 0 .2rem}
+  #glossary .lead b{color:var(--text)}
+  #glossary .lnk{margin-top:.9rem;font-size:.84rem}
+  #glossary .lnk a{color:var(--accent);text-decoration:none;margin-right:1rem}
+  #glossary .two{display:grid;grid-template-columns:1fr 1fr;gap:0 1.6rem}
+  @media(max-width:760px){#glossary .two{grid-template-columns:1fr}}
+</style>
+<script>
+(function(){
+  var HTML = '<div class="gh"><b>Framework &amp; terminology</b><span id="gtog">hide</span></div>'
+   + '<div class="gb" id="gbody">'
+   + '<div class="lead">This dashboard applies the <b>CNHR&ndash;MNHR framework</b>. A ride offer shows a headline fare, '
+   + 'but that ignores the unpaid drive to the pickup, the fixed weekly cost of running the vehicle, and whether the week '
+   + 'is on track. Two metrics fix that: <b>CNHR</b> asks &ldquo;after costs, what has each hour actually paid?&rdquo; and '
+   + '<b>MNHR</b> asks &ldquo;is the next hour still worth working?&rdquo;</div>'
+   + '<div class="two"><div>'
+   + '<h5>Core metrics</h5><table>'
+   + '<tr><td>r&#8345; (CNHR)</td><td><b>Cost-normalised hourly rate</b> = (E&#8345; &minus; C_w) / H&#8345;. Cumulative earnings minus the week&rsquo;s whole fixed cost, per paid hour. Starts negative, climbs through the week.</td></tr>'
+   + '<tr><td>m&#771;&#8345; (MNHR)</td><td><b>Marginal net hourly rate</b> &mdash; EMA of (&rho; &minus; &lambda;). What a trip earns <i>above</i> the cost of the time it consumes, smoothed so one trip doesn&rsquo;t swing it.</td></tr>'
+   + '<tr><td>&rho; (rho)</td><td>Gross rate before costs. <i>&rho; trip</i> = trip earnings &divide; paid time; <i>&rho; avg</i> = running average.</td></tr>'
+   + '<tr><td>m_i</td><td>This trip&rsquo;s marginal rate, &rho; &minus; &lambda; (unsmoothed).</td></tr>'
+   + '</table>'
+   + '<h5>Constants</h5><table>'
+   + '<tr><td>C_w = &pound;430/wk</td><td>Fixed weekly cost &mdash; vehicle, insurance, phone, charging.</td></tr>'
+   + '<tr><td>r* = &pound;15/hr</td><td>Target hourly rate after costs.</td></tr>'
+   + '<tr><td>&lambda; = &pound;21.45/hr</td><td>Cost rate = C_w / h&#772;. What one hour of committed time costs.</td></tr>'
+   + '<tr><td>h&#772; = 20.05 h</td><td>Baseline paid hours per week.</td></tr>'
+   + '<tr><td>&alpha; = 0.15</td><td>EMA smoothing factor for MNHR.</td></tr>'
+   + '</table></div><div>'
+   + '<h5>Trip table columns</h5><table>'
+   + '<tr><td>Earn / Dur</td><td>Trip earnings (e_i) and duration (t_i, paid time).</td></tr>'
+   + '<tr><td>Cum &pound; / Cum H</td><td>E&#8345; and H&#8345; &mdash; cumulative earnings and paid hours.</td></tr>'
+   + '<tr><td>Rec%</td><td>Cost recovery = (E&#8345; / C_w) &times; 100. Reaches 100% at break-even.</td></tr>'
+   + '<tr><td>Util</td><td>Utilisation = paid time &divide; committed time (paid + en-route). Lower means more unpaid driving.</td></tr>'
+   + '<tr><td>BE@#</td><td><b>Break-even trip</b> &mdash; the first trip where E&#8345; &ge; C_w (week&rsquo;s costs covered).</td></tr>'
+   + '<tr><td>r*@#</td><td>First trip where r&#8345; reaches the &pound;15/hr target.</td></tr>'
+   + '</table>'
+   + '<h5>Four-state diagnostic <span style="text-transform:none;letter-spacing:0">(position &times; direction)</span></h5><table>'
+   + '<tr><td style="color:#22c55e">SUSTAINED</td><td>At/above target <i>and</i> the marginal rate is still pulling up.</td></tr>'
+   + '<tr><td style="color:#059669">ACCEL_REC</td><td>Below target, but recent trips beat the average &mdash; recovering.</td></tr>'
+   + '<tr><td style="color:#d97706">DECEL</td><td>Above target but the marginal rate is falling &mdash; position eroding.</td></tr>'
+   + '<tr><td style="color:#dc2626">STALLED</td><td>Below target and not improving &mdash; change area, hours or selection.</td></tr>'
+   + '</table>'
+   + '<h5>Volatility</h5><table>'
+   + '<tr><td>AM(&rho;) / GM(&rho;)</td><td>Arithmetic and geometric mean of trip rates; GM penalises bad trips more.</td></tr>'
+   + '<tr><td>Gap</td><td>AM &minus; GM. &gt;&pound;4 high volatility &middot; &gt;&pound;2 moderate &middot; &le;&pound;2 disciplined.</td></tr>'
+   + '</table></div></div>'
+   + '<div class="lnk"><a href="../framework.html">Full framework &amp; glossary &rarr;</a>'
+   + '<a href="https://github.com/shehzadqayum/cnhr-mnhr-framework">Reference implementation on GitHub &rarr;</a>'
+   + '<a href="../index.html">Back to the showcase</a></div>'
+   + '</div>';
+  var open = true;
+  function build(){
+    var app = document.getElementById('app'); if(!app) return;
+    if(document.getElementById('glossary')) return;
+    var sub = app.querySelector('.sub'); if(!sub) return;
+    var g = document.createElement('div'); g.id = 'glossary'; g.innerHTML = HTML;
+    sub.parentNode.insertBefore(g, sub.nextSibling);
+    var body = g.querySelector('#gbody'), tog = g.querySelector('#gtog');
+    body.style.display = open ? 'block' : 'none';
+    tog.textContent = open ? 'hide' : 'show';
+    g.querySelector('.gh').addEventListener('click', function(){
+      open = !open;
+      body.style.display = open ? 'block' : 'none';
+      tog.textContent = open ? 'hide' : 'show';
+    });
+  }
+  document.addEventListener('click', function(){ setTimeout(build, 60); }, true);
+  window.addEventListener('load', function(){ setTimeout(build, 120); });
+  setTimeout(build, 0);
+})();
+</script>
+<!--/GLOSSARY-->

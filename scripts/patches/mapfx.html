@@ -1,0 +1,186 @@
+<!--MAPFX-->
+<style>
+  #map-legend{display:flex;align-items:center;gap:10px;margin:.6rem 0 .2rem;font-size:.72rem;color:var(--text-muted)}
+  #map-legend .bar{height:10px;width:190px;border-radius:3px}
+  #map-legend .hint{margin-left:auto;color:var(--accent)}
+  .leaflet-tooltip.rt{width:250px;white-space:normal;line-height:1.4;font-size:.76rem}
+  .leaflet-tooltip.rt b{font-size:.8rem}
+  .leaflet-tooltip.rt .r{display:flex;justify-content:space-between;gap:8px}
+  .leaflet-tooltip.rt .r span:last-child{font-variant-numeric:tabular-nums}
+</style>
+<script>
+(function(){
+  if (typeof buildMapLayers !== 'function') return;
+
+  // --- light-background palettes -------------------------------------------------
+  var STATE = { SUSTAINED:'#15803d', ACCEL_REC:'#0e7490', DECEL:'#b45309', STALLED:'#b91c1c' };
+  var DEFAULT_C = '#2563eb', ENROUTE_C = '#94a3b8', DEADHEAD_C = '#cbd5e1';
+  // low -> high sweeps blue(225) to red(0); lightness 42% so every step reads on light tiles
+  function ramp(f){ f = Math.max(0, Math.min(1, f)); return 'hsl(' + Math.round(225 * (1 - f)) + ',78%,42%)'; }
+
+  // The generated data ships per_hr / per_mile / trip_miles / trip_mins as 0, so derive
+  // them from t_dur (hours) and the injected GPS track.
+  function hav(a, b){
+    var R = 3958.8, dla = (b[0]-a[0]) * Math.PI/180, dlo = (b[1]-a[1]) * Math.PI/180;
+    var x = Math.sin(dla/2)*Math.sin(dla/2) +
+            Math.cos(a[0]*Math.PI/180)*Math.cos(b[0]*Math.PI/180)*Math.sin(dlo/2)*Math.sin(dlo/2);
+    return 2 * R * Math.asin(Math.sqrt(x));
+  }
+  function derive(t){
+    if (t._d) return t;
+    var mi = +t.trip_miles || 0;
+    if (!mi && t.trip_track && t.trip_track.length > 1){
+      var s = 0; for (var i = 0; i < t.trip_track.length - 1; i++) s += hav(t.trip_track[i], t.trip_track[i+1]);
+      mi = s;
+    }
+    var hrs = +t.t_dur || 0;
+    t._mi = mi;
+    t._mins = hrs * 60;
+    t._perHr = +t.per_hr || (hrs > 0 ? (+t.t_earn || 0) / hrs : 0);
+    t._perMile = +t.per_mile || (mi > 0 ? (+t.t_earn || 0) / mi : 0);
+    t._d = true;
+    return t;
+  }
+  function metricVal(t){
+    if (mapColorMode === 'mnhr') return +t.mnhr_true || 0;
+    if (mapColorMode === 'per_hr') return derive(t)._perHr;
+    if (mapColorMode === 'per_mile') return derive(t)._perMile;
+    return 0;
+  }
+  function isMetricMode(){ return ['mnhr','per_hr','per_mile'].indexOf(mapColorMode) >= 0; }
+
+  var LO = 0, HI = 1;
+  function scaleFor(trips){
+    var v = trips.map(metricVal).filter(function(n){ return isFinite(n) && n !== 0; })
+                 .sort(function(a,b){ return a - b; });
+    if (!v.length) return [0, 1];
+    var lo = v[Math.floor(v.length * 0.10)], hi = v[Math.max(0, Math.ceil(v.length * 0.90) - 1)];
+    if (!(hi > lo)) { lo = v[0]; hi = v[v.length - 1]; }
+    if (!(hi > lo)) { hi = lo + 1; }
+    return [lo, hi];
+  }
+  getMapTripColor = function(t, trips){
+    if (mapColorMode === 'default') return DEFAULT_C;
+    if (mapColorMode === 'four_state') return STATE[t.four_state] || '#64748b';
+    if (!isMetricMode()) return DEFAULT_C;
+    return ramp((metricVal(t) - LO) / (HI - LO));
+  };
+
+  // --- enriched hover tooltip ----------------------------------------------------
+  function money(n){ return '£' + (Math.round((+n || 0) * 100) / 100).toFixed(2); }
+  function row(a, b){ return '<div class="r"><span>' + a + '</span><span>' + b + '</span></div>'; }
+  function tipFor(t){
+    derive(t);
+    var st = (t.four_state || '').replace('ACCEL_REC', 'Accel recovery').replace('DECEL', 'Decelerating')
+              .replace('SUSTAINED', 'Sustained').replace('STALLED', 'Stalled');
+    return '<b>#' + t.n + ' · ' + (t.day || '') + ' ' + (t.time || '') + '</b>'
+          + '<div style="opacity:.75">' + (t.service || '') + (t.stk ? ' · stacked' : '') + '</div>'
+          + '<div style="opacity:.75;margin-bottom:4px">' + (t.pickup || '?') + ' → ' + (t.dropoff || '?') + '</div>'
+          + row('Earned', money(t.t_earn))
+          + row('Trip', (t._mins ? Math.round(t._mins) + ' min' : '?') +
+                        (t._mi ? ' · ' + t._mi.toFixed(1) + ' mi' : ''))
+          + row('Utilisation', Math.round((t.util || 0) * 100) + '% of committed time paid')
+          + row('ρ paid / true', money(t.rho_paid) + ' / ' + money(t.rho_true) + '/hr')
+          + row('MNHR (true)', money(t.mnhr_true) + '/hr')
+          + row('£ per hour / mile', money(t._perHr) + ' / ' + (t._perMile ? money(t._perMile) : 'n/a'))
+          + row('CNHR after trip', money(t.r_n) + '/hr')
+          + row('Cumulative', money(t.cum_e) + ' · ' + (+t.cum_h || 0).toFixed(1) + 'h')
+          + '<div style="margin-top:3px;opacity:.8">State: ' + st + ' · recovery ' + Math.round(t.recovery_pct || 0) + '%</div>';
+  }
+
+  // --- rebuild layers with colours, tooltips and click-to-isolate -----------------
+  var lastTripClick = 0;
+  buildMapLayers = function(week){
+    var trips = week.trips || [];
+    Object.values(mapTripLayers).forEach(function(l){
+      if (l.enroute) l.enroute.remove(); if (l.trip) l.trip.remove();
+      l.markers.forEach(function(m){ m.remove(); });
+    });
+    mapDeadheadLayers.forEach(function(l){ l.remove(); });
+    mapTripLayers = {}; mapDeadheadLayers = [];
+
+    if (isMetricMode()) { var sc = scaleFor(trips); LO = sc[0]; HI = sc[1]; }
+    updateLegend();
+
+    trips.forEach(function(t){
+      var c = getMapTripColor(t, trips);
+      var layers = { enroute:null, trip:null, markers:[] };
+      var tip = tipFor(t);
+      function wire(layer){
+        layer.bindTooltip(tip, { sticky:true, direction:'top', className:'rt' });
+        layer.on('click', function(e){
+          if (e && e.originalEvent) L.DomEvent.stopPropagation(e);
+          lastTripClick = Date.now();
+          if (mapSelectedTrip === t.n) { mapShowAll(week); } else { mapShowTrip(t.n); }
+        });
+      }
+      if (t.has_gps_track && t.enroute_track && t.enroute_track.length > 1){
+        layers.enroute = L.polyline(t.enroute_track, { color:ENROUTE_C, weight:3, opacity:0.75, dashArray:'8,6' });
+        wire(layers.enroute);
+      }
+      if (t.has_gps_track && t.trip_track && t.trip_track.length > 1){
+        layers.trip = L.polyline(t.trip_track, { color:c, weight:4.5, opacity:0.95 });
+        wire(layers.trip);
+      }
+      if (t.pickup_pos){
+        var pm = L.circleMarker(t.pickup_pos, { radius:4.5, color:'#fff', weight:1.5, fillColor:c, fillOpacity:1 });
+        wire(pm); layers.markers.push(pm);
+      }
+      if (t.dropoff_pos){
+        var dm = L.circleMarker(t.dropoff_pos, { radius:4.5, color:c, weight:2, fillColor:'#fff', fillOpacity:1 });
+        wire(dm); layers.markers.push(dm);
+      }
+      mapTripLayers[t.n] = layers;
+    });
+
+    (week.map_deadheads || []).forEach(function(d){
+      if (d.track && d.track.length > 1){
+        var line = L.polyline(d.track, { color:DEADHEAD_C, weight:2, opacity:0.6, dashArray:'3,7' });
+        line.bindTooltip('Repositioning · #' + d.from_trip + ' → #' + d.to_trip, { sticky:true, className:'rt' });
+        mapDeadheadLayers.push(line);
+      }
+    });
+  };
+
+  // --- gradient legend under the colour buttons ----------------------------------
+  var LABEL = { mnhr:'MNHR (true) £/hr', per_hr:'£ per hour', per_mile:'£ per mile' };
+  function updateLegend(){
+    var key = isMetricMode() ? mapColorMode : null;
+    var host = document.querySelector('.map-container') || document.getElementById('map-body');
+    if (!host) return;
+    var lg = document.getElementById('map-legend');
+    if (!lg){ lg = document.createElement('div'); lg.id = 'map-legend'; host.parentNode.insertBefore(lg, host); }
+    var hint = '<span class="hint">click a route to isolate · click empty map to reset</span>';
+    if (!key){
+      lg.innerHTML = (mapColorMode === 'four_state')
+        ? Object.keys(STATE).map(function(k){
+            return '<span style="display:inline-flex;align-items:center;gap:5px">'
+                 + '<span style="width:11px;height:11px;border-radius:3px;background:' + STATE[k] + '"></span>'
+                 + k.replace('ACCEL_REC','Accel recovery').replace('DECEL','Decelerating').toLowerCase() + '</span>';
+          }).join('') + hint
+        : '<span style="display:inline-flex;align-items:center;gap:5px">'
+          + '<span style="width:11px;height:11px;border-radius:3px;background:' + DEFAULT_C + '"></span>paid trip</span>'
+          + '<span style="display:inline-flex;align-items:center;gap:5px">'
+          + '<span style="width:11px;height:11px;border-radius:3px;background:' + ENROUTE_C + '"></span>en-route</span>' + hint;
+      return;
+    }
+    var stops = [0, .25, .5, .75, 1].map(function(f){ return ramp(f); }).join(',');
+    lg.innerHTML = '<span>' + (LABEL[key] || key) + '</span>'
+      + '<span>' + (Math.round(LO * 100) / 100) + '</span>'
+      + '<span class="bar" style="background:linear-gradient(90deg,' + stops + ')"></span>'
+      + '<span>' + (Math.round(HI * 100) / 100) + '</span>' + hint;
+  }
+
+  // --- click empty map to clear the isolated trip ---------------------------------
+  var _make = makeLeafletMap;
+  makeLeafletMap = function(week){
+    _make(week);
+    if (weekMap){
+      weekMap.on('click', function(){
+        if (mapSelectedTrip != null && Date.now() - lastTripClick > 120) mapShowAll(week);
+      });
+    }
+  };
+})();
+</script>
+<!--/MAPFX-->

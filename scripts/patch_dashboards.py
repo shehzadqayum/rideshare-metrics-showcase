@@ -7,8 +7,11 @@ generated file. Each patch is delimited by an HTML marker comment and is
 idempotent: running this repeatedly is a no-op, and running it after the
 pipeline regenerates a dashboard restores the showcase's fixes.
 
-Existing marker blocks (GLOSSARY, MAPFX, TIDY) were applied by earlier ad-hoc
-scripts; this file adds the SHELL block and is where any future patch belongs.
+GLOSSARY, MAPFX and TIDY were originally applied by earlier ad-hoc scripts and
+survived only in the generated file, so a pipeline regeneration would have lost
+them. Their exact content now lives in scripts/patches/<name>.html (markers
+included) and is re-applied here, alongside the SHELL block. This file is where
+any future patch belongs.
 """
 import io, os, re
 
@@ -54,6 +57,14 @@ FAVICON = ("<link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg xmlns='http://ww
 # The dashboards are hard-coded dark and declare no custom properties, so the
 # patched-in blocks that use var(--surface) etc. rendered unstyled. Scope
 # fallbacks to those blocks only, using the dashboards' own palette.
+#
+# ONE SHELL, BOTH DASHBOARDS, BY DESIGN. This exact block is injected into both
+# cnhr_dashboard.html and surge_report.html. The whole <style> below (~7.7 KB) is
+# LIVE on cnhr (its #app, stat labels, map buttons and Leaflet map all exist) and
+# INERT on surge (which has none of them) — that dead weight is the deliberate
+# price of a single shared block, not waste to strip. The full-screen JS further
+# down is the dashboards' own copy of site.js's mapExtras(); see the TWINNED note
+# there. Keep the two in step by hand.
 SHELL = """<!--SHELL-->
 <style>
   #glossary{--surface:#0a0f1a;--border:#1e293b;--text:#e2e8f0;--text-muted:#94a3b8;--accent:#f59e0b}
@@ -500,6 +511,37 @@ window.addEventListener('load', function () {
 <!--/SHELL-->"""
 
 
+# GLOSSARY, MAPFX and TIDY live in scripts/patches/ so they are version-
+# controlled instead of surviving only inside the generated file. They are
+# specific to cnhr_dashboard.html. Refreshing IN PLACE is safe and idempotent
+# because the committed content is the block verbatim; but the correct anchor
+# for re-INSERTING after a fresh pipeline regen (MAPFX must follow the generated
+# map script, not sit at </head>) cannot be reproduced blindly, so if the marker
+# is gone we refuse to guess and tell the maintainer to re-insert by hand.
+PATCH_BLOCKS = ('glossary', 'mapfx', 'tidy')
+
+def _load_block(name):
+    # Normalise to LF: the dashboards are written with newline='\n', and a
+    # Windows checkout (autocrlf) can flip these committed files to CRLF. Without
+    # this, a CRLF-checked-out block would splice CRLF lines into an LF file.
+    raw = io.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'patches', name + '.html'),
+                  encoding='utf-8').read()
+    return raw.replace('\r\n', '\n')
+
+def reapply_blocks(path, s, log):
+    base = os.path.basename(path)
+    for name in PATCH_BLOCKS:
+        tag = name.upper()
+        if ('<!--%s-->' % tag) in s:
+            block = _load_block(name)
+            # lambda replacement, not a string: the block is HTML/JS and may
+            # contain backslashes that re.sub would otherwise treat as group refs.
+            s = re.sub(r'<!--%s-->.*?<!--/%s-->' % (tag, tag), lambda m: block, s, flags=re.S)
+            log.append(name)
+        elif base == 'cnhr_dashboard.html':
+            log.append('%s MISSING - re-insert scripts/patches/%s.html by hand' % (name, name))
+    return s
+
 def patch(path):
     s = io.open(path, encoding='utf-8', errors='ignore').read()
     orig, log = s, []
@@ -514,6 +556,8 @@ def patch(path):
     else:
         s = s.replace('</head>', SHELL + '\n</head>', 1)
         log.append('shell')
+
+    s = reapply_blocks(path, s, log)
 
     if s != orig:
         io.open(path, 'w', encoding='utf-8', newline='\n').write(s)
