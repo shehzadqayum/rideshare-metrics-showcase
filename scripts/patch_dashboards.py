@@ -111,6 +111,70 @@ SHELL = """<!--SHELL-->
   #app .leaflet-container .leaflet-bar a{color:#333}  /* Leaflet's own, 12.6:1 */
 </style>
 <script>
+// The surge report builds every panel inside
+//   fetch('../data/demand.json').then(r => r.json()).then(D => { ... })
+// with no r.ok test and no .catch. A missing file (GitHub Pages answers a 404
+// with an HTML body, so r.json() throws SyntaxError: Unexpected token '<'), a
+// truncated file, and an offline tab all end the same way: an unhandled
+// rejection, with #heat, #windows, #strategy and #conditions left empty and
+// nothing on the page to say why. A well-formed file that has lost its
+// forecast key is worse still - the page's own `if (!F) return;` swallows it
+// in silence. That fetch is emitted into the body by the pipeline and cannot
+// be edited from here, so wrap window.fetch instead; SHELL lands in <head>, so
+// this script is early enough to do it.
+// Only the surge report is touched. cnhr_dashboard.html inlines its data and
+// calls fetch nowhere (0 occurrences of demand.json in it), so the wrapper is
+// a no-op there - and because it loads neither site.js nor style.css,
+// dataFail(), .explain and --critical are all absent, hence the self-styled
+// fallback banner below.
+// Failures stall the page's chain on a promise that never settles rather than
+// re-throwing: the message is already on screen, and re-throwing would only
+// put the unhandled rejection back in the console.
+(function () {
+  if (typeof window.fetch !== 'function' || window.__dataGuard) return;
+  window.__dataGuard = true;
+  var inner = window.fetch;
+  var told = false;                       // one banner, however many callers fail
+  var report = function (err) {
+    if (told) return;
+    told = true;
+    // site.js is loaded by surge_report.html, and dataFail() is what every
+    // hand-written page shows for exactly this. Its banner lands after
+    // header.page, styled .explain with a --critical left border.
+    if (typeof dataFail === 'function') { dataFail('the surge forecast')(err); return; }
+    console.error('[showcase] data load failed: the surge forecast', err);
+    var host = document.querySelector('header.page') || document.querySelector('main, .wrap');
+    if (!host || !host.parentNode) return;
+    var d = document.createElement('div');
+    d.setAttribute('role', 'alert');
+    d.style.cssText = 'margin:16px 0;padding:14px 16px;border:1px solid #7f1d1d;border-left:3px solid #f87171;border-radius:10px;background:#180f0f;color:#e6d5d5;font-size:.9rem;line-height:1.55';
+    d.textContent = 'Could not load the surge forecast. The request failed (' + err.message + '), so the heatmap, windows and tables below are empty. If you opened this file from disk, serve the docs/ folder over HTTP instead. Otherwise reload the page.';
+    host.parentNode.insertBefore(d, host.nextSibling);
+  };
+  var stall = function (err) { report(err); return new Promise(function () { }); };
+  window.fetch = function (input) {
+    var url = (typeof input === 'string') ? input : (input && input.url) || '';
+    var p = inner.apply(this, arguments);
+    if (url.indexOf('demand.json') < 0) return p;   // every other request is untouched
+    return p.then(function (r) {
+      if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+      // The page calls r.json() itself, so the parse has to be guarded on the
+      // Response. json() lives on Response.prototype; an own property shadows
+      // it and the caller still receives the same Response object.
+      var raw = r.json.bind(r);
+      r.json = function () {
+        return raw().then(function (D) {
+          if (!D || !D.forecast) throw new Error('the file has no forecast section');
+          return D;
+        }, function (e) {
+          throw new Error('the file is not valid JSON - ' + e.message);
+        }).catch(stall);
+      };
+      return r;
+    }).catch(stall);
+  };
+})();
+
 // 406 of 762 trips have no GPS track, but every row is click-wired to
 // mapShowTrip, which calls mapClearAll() *before* discovering there is no layer
 // to draw - blanking the map with no explanation. Guard it, and mark the rows.

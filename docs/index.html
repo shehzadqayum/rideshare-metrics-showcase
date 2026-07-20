@@ -6,7 +6,7 @@
 <meta name="description" content="A working showcase of ride-share data tools: 778 real London private-hire trips captured over 17 weeks, GPS-mapped, cost-normalised and scored with the CNHR-MNHR framework.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Ride-share metrics — a working showcase</title>
-<link rel="stylesheet" href="assets/style.css?v=67">
+<link rel="stylesheet" href="assets/style.css?v=68">
 <style>
   .tile.artifact { border-left:3px solid var(--s1); }
   .tile .go { margin-top:9px; font-size:.78rem; font-weight:600; color:var(--s1); }
@@ -115,20 +115,58 @@
   the projects' own report files. Passenger names are removed, addresses reduced to area level, and mapped
   routes clipped at both ends so no leg begins or ends at a door.</footer>
 </main>
-<script src="assets/site.js?v=67"></script>
+<script src="assets/site.js?v=68"></script>
 <script>
-Promise.all([getJSON('data/trips.json'), getJSON('data/charging.json'), getJSON('data/routes.json?v=29'), getJSON('data/metrics.json')])
-.then(([t, c, r, m]) => {
+/* routes.json is 604 KB — 99% of the bytes this page fetches — and exactly ONE of the
+   five hero cards is computed from it (the GPS segment count, and miles mapped via
+   trackMiles). Awaiting it inside one Promise.all held the other four cards, whose
+   three files total under 5 KB, behind the largest file on the site.
+
+   So the five slots are painted synchronously as placeholders, the small files fill
+   their four in one round trip, and routes.json fills the fifth whenever it lands.
+   The slot COUNT and each card's three-line structure never change, so the auto-fit
+   grid never reflows and nothing on the page moves. */
+const heroEl = document.getElementById('hero');
+const slots = [
+  card('—', 'activities logged', 'Dec 2025 – Mar 2026'),
+  card('—', 'gross earnings', '17 Uber weeks'),
+  card('—', 'GPS route segments', 'measuring…'),
+  card('—', 'charging sessions', '—'),
+  card('—', 'weeks at target rate', '£15/h after costs'),
+];
+const paint = () => { heroEl.innerHTML = slots.join(''); };
+paint();
+
+/* Two chains can now fail independently (opened from file://, every fetch fails),
+   but the reader needs ONE banner: the first failure takes the existing dataFail
+   path, any second is logged only. */
+let alerted = false;
+const fail = (what, scope) => err => {
+  if (alerted) return console.error('[showcase] data load also failed:', what, err);
+  alerted = true;
+  dataFail(what, scope)(err);
+};
+
+Promise.all([getJSON('data/trips.json'), getJSON('data/charging.json'), getJSON('data/metrics.json')])
+.then(([t, c, m]) => {
+  slots[0] = card(fmt(t.total_activities), 'activities logged', 'Dec 2025 – Mar 2026');
+  slots[1] = card('£' + fmt(t.total_earnings), 'gross earnings', '17 Uber weeks');
+  slots[3] = card(fmt(c.sessions), 'charging sessions', fmt(c.kwh) + ' kWh');
+  slots[4] = card(m.weekly.filter(w => w.cnhr >= 15).length + '/' + m.weekly.length, 'weeks at target rate', '£15/h after costs');
+  paint();
+}).catch(fail('the summary data', 'the totals above could not be filled in'));
+
+getJSON('data/routes.json?v=29').then(r => {
   const segs = Object.values(r.days).reduce((a, d) => a + d.features.length, 0);
   const miles = trackMiles(Object.values(r.days).flatMap(d => d.features));   // measured, not double-counted
-  document.getElementById('hero').innerHTML =
-    card(fmt(t.total_activities), 'activities logged', 'Dec 2025 – Mar 2026') +
-    card('£' + fmt(t.total_earnings), 'gross earnings', '17 Uber weeks') +
-    card(fmt(segs), 'GPS route segments', fmt(miles) + ' miles mapped') +
-    card(fmt(c.sessions), 'charging sessions', fmt(c.kwh) + ' kWh') +
-    card(m.weekly.filter(w => w.cnhr >= 15).length + '/' + m.weekly.length, 'weeks at target rate', '£15/h after costs');
-}).catch(dataFail('the summary data'));
+  slots[2] = card(fmt(segs), 'GPS route segments', fmt(miles) + ' miles mapped');
+  paint();
+}).catch(err => {
+  slots[2] = card('—', 'GPS route segments', 'unavailable');   // never leave it reading “measuring…”
+  paint();
+  fail('the route totals')(err);
+});
 </script>
-<script src="assets/nav.js?v=67"></script>
+<script src="assets/nav.js?v=68"></script>
 </body>
 </html>

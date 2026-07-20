@@ -6,7 +6,7 @@
 <meta name="description" content="London's live transport, aviation, events and weather turned into an hourly surge forecast with ranked priority windows and a positioning plan.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Surge dashboard — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=67">
+<link rel="stylesheet" href="assets/style.css?v=68">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 <style>
   .daybar { position:sticky; top:var(--rsnav-h, 52px); z-index:5; background:var(--page); padding:10px 0 8px; border-bottom:1px solid var(--border); margin-bottom:14px; }
@@ -126,7 +126,7 @@
   <footer class="site">Data: docs/data/demand.json — every saved multi-source capture, the generated surge
   report, and the SQLite session log. Map: OpenStreetMap / CARTO. Nothing mocked.</footer>
 </main>
-<script src="assets/site.js?v=67"></script>
+<script src="assets/site.js?v=68"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js" integrity="sha384-mFKkGiGvT5vo1fEyGCD3hshDdKmW3wzXW/x+fWriYJArD0R3gawT6lMvLboM22c0" crossorigin="anonymous"></script>
 <script>
@@ -334,6 +334,6 @@ getJSON('data/demand.json').then(D => {
   select(rich);
 }).catch(dataFail('the demand data'));
 </script>
-<script src="assets/nav.js?v=67"></script>
+<script src="assets/nav.js?v=68"></script>
 </body>
 </html>

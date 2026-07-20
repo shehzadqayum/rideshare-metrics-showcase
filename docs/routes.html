@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 340 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=67">
+<link rel="stylesheet" href="assets/style.css?v=68">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -90,7 +90,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=67"></script>
+<script src="assets/site.js?v=68"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -159,6 +159,12 @@ function legend() {
 // (hybrid). The order and the speed are real; only the overall length is
 // compressed, and the clock shows the true time of day.
 let pb = null, userMult = null;   // userMult: a speed the viewer chose, kept across days
+// userMode: a colour mode the viewer PICKED, kept across days for the same reason
+// userMult is. Day navigation lives in the play bar, so days change constantly, and
+// pbPlay's "fresh replay" branch fires on every one of them (pbTeardown nulls pb) —
+// which silently threw the chosen colouring away and snapped back to the speed heat
+// map. Continuous play walks all 31 days on its own, so it happened unattended too.
+let userMode = null;
 let speedRend = null;             // one shared canvas for the speed-mode layer (see buildSpeedLayer)
 // Follow is the DEFAULT view mode: the replay is the point of this page, and
 // watching it from a fixed frame means watching a dot cross a static picture.
@@ -758,6 +764,21 @@ function pbInit(dayKey) {
   pb.partial = L.polyline([p0, p0], { color: c0, weight: 4, opacity: .95, renderer: pb.mrend }).addTo(map);
   pb.halo = L.circleMarker(p0, { radius: 13, stroke: false, fillColor: c0, fillOpacity: .22, interactive: false, renderer: pb.mrend }).addTo(map);
   pb.marker = L.circleMarker(p0, { radius: 8, color: '#fff', weight: 3, fillColor: c0, fillOpacity: 1, renderer: pb.mrend }).addTo(map);
+  pbFrame();
+  pbFrameRender(); pbBtnLabel();
+  return true;
+}
+// Framing for the START of a run. Lifted out of pbInit unchanged, because REPLAY
+// needs exactly this and nothing was doing it: a finished run leaves the map
+// wherever the last follow pan — or the viewer's own drag — put it, so pressing
+// Replay restarted the day from that framing with the car frequently off screen.
+// ONE setView, and animate:false, are both load-bearing: map._stop() cancels PAN
+// animations only, so any animated framing issued here would land AFTER the
+// first follow pans of the new run and overwrite them.
+// Reads `follow` live, so the zoom floor applies only when following — meaning
+// callers must settle follow BEFORE calling this.
+function pbFrame() {
+  if (!pb || !pb.ghost) return;
   try {
     // Framed in ONE call. Doing fitBounds then setZoom does not work: fitBounds
     // animates, so it lands after the setZoom and overwrites it - measured, the
@@ -774,8 +795,6 @@ function pbInit(dayKey) {
                      : Math.min(MAX_PLAY_Z, fit);
     map.setView(b.getCenter(), z, { animate: false });
   } catch (e) {}
-  pbFrameRender(); pbBtnLabel();
-  return true;
 }
 function pbTeardown(restore) {
   clearTimeout(contTimer);        // picking a day by hand cancels a pending roll-on
@@ -802,11 +821,36 @@ function setColourMode(m) {      // set mode + button state + legend, without re
   legend();
 }
 function pbPlay() {
+  // Starting playback outranks a pending roll-on, the same way pausing and
+  // picking a day by hand already do. Finishing a day arms contTimer
+  // (pbNextDay), and that is exactly the CONT_HOLD beat where the button reads
+  // Replay — so a Replay click restarted the day but left the timer armed, and
+  // it still fired and stepped the viewer to the next day mid-replay. Covering
+  // it here rather than in pbToggle also covers the Space-key toggle, and is
+  // harmless on the call from inside contTimer's own callback (already fired).
+  clearTimeout(contTimer);
   if (!pb) {
-    setColourMode('speed');     // playback defaults to the speed heat map
+    setColourMode(userMode || 'speed');   // speed heat map is the DEFAULT, not an override: an explicit pick wins
     if (!pbInit(document.getElementById('daySel').value)) return;
   }
-  if (pb.done) pbReset();
+  if (pb.done) {
+    // Replay is a fresh START, not a resume, so it has to do what pbInit does at
+    // the top of a run. It did neither, and pbReset only touches counters — so a
+    // replay began at whatever framing the last run (or the viewer's drag) left
+    // behind, with the car often off screen and follow unable to fetch it back.
+    // The followUserOff distinction is the whole subtlety: follow switched off by
+    // the BUTTON is deliberate and must survive the replay; follow merely shrugged
+    // off by a drag must not. This is the same test pbInit makes, deliberately
+    // word for word, and it must run BEFORE pbFrame — the zoom floor applies only
+    // when following.
+    if (!follow && !followUserOff) setFollow(true);
+    pbReset();
+    // A finished run leaves the last heading and setback in place; pbInit starts
+    // both at zero, and without this the anchor is skewed toward where the car was
+    // going when it stopped, not where it is about to go.
+    pb.look = { x: 0, y: 0 }; pb.head = { x: 0, y: 0 };
+    pbFrame();   // animate:false inside — see the note on pbFrame
+  }
   pb.playing = true; pb.last = null; pbBtnLabel();
   pb.raf = requestAnimationFrame(pbTick);
 }
@@ -1145,6 +1189,7 @@ getJSON('data/routes.json?v=29').then(d => {   // ?v bumped whenever the DATA ch
   });
   document.querySelectorAll('#modeBtns button').forEach(b =>
     b.addEventListener('click', () => {
+      userMode = b.dataset.mode;   // an explicit choice, kept across day changes
       setColourMode(b.dataset.mode);
       if (pb) pbRestyle(); else render(false);
     }));
@@ -1207,9 +1252,20 @@ getJSON('data/routes.json?v=29').then(d => {   // ?v bumped whenever the DATA ch
     // "All days" is the state the page opens in, and there is no DATA.days.ALL,
     // so scrubbing before pressing Play threw inside the listener - silently,
     // leaving a dead scrubber. Pick a day the same way Play does.
+    // Read the dragged position BEFORE the day change: the change handler
+    // fires synchronously and resets pbEls.seek.value = 0, so reading the
+    // slider afterwards seeked the first scrub on "All days" to the start
+    // of the day instead of to where the viewer dropped the thumb.
+    const frac = pbEls.seek.value / 1000;
     if (sel.value === 'ALL') { sel.value = pbPickDay(); sel.dispatchEvent(new Event('change')); }
     if (!pb && !pbInit(sel.value)) return;
-    pb.scrubbing = true; pbSeek(pbEls.seek.value / 1000); pb.scrubbing = false;
+    pb.scrubbing = true; pbSeek(frac); pb.scrubbing = false;
+    // Put the thumb back LAST. TWO things reset it on this path: the day-change
+    // handler, and the frame pbInit renders on its way up - that one calls
+    // pbFrameRender before pb.scrubbing is set, so the !scrubbing guard does not
+    // protect it and it writes progress 0. Restoring any earlier seeks to the
+    // right place but leaves the thumb parked at 0 while the readout shows 17:57.
+    pbEls.seek.value = Math.round(frac * 1000);
   });
   document.getElementById('pbSpdRange').addEventListener('input', e => {
     userMult = PB_MULTS[+e.target.value];   // an explicit choice, kept across day changes
@@ -1233,6 +1289,6 @@ getJSON('data/routes.json?v=29').then(d => {   // ?v bumped whenever the DATA ch
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=67"></script>
+<script src="assets/nav.js?v=68"></script>
 </body>
 </html>

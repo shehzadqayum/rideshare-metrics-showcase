@@ -186,13 +186,18 @@ const getJSON = p => fetch(p).then(r => {
 /* Every page builds its content inside a getJSON .then, so an unhandled
    rejection leaves empty cards and a blank map box with nothing to explain it.
    Pages pass the selector of their main container. */
-function dataFail(file) {
+/* `scope` describes what is actually missing. It used to be safe to say the whole
+   page was empty, because every page awaited all of its data in one Promise.all.
+   index.html now loads its small files separately from the 600 KB routes.json, so
+   a routes failure leaves four of the five hero cards correctly populated - and
+   telling the reader everything below is empty would be plainly untrue. */
+function dataFail(file, scope) {
   return err => {
     const host = document.querySelector('header.page') || document.querySelector('main, .wrap');
     if (host) host.insertAdjacentHTML('afterend',
       '<div class="explain" role="alert" style="border-left-color:var(--critical)">'
       + '<b>Could not load ' + (file || 'the data for this page') + '.</b> '
-      + 'The request failed (' + err.message + '), so the figures, tables and maps below are empty. '
+      + 'The request failed (' + err.message + '), so ' + (scope || 'the figures, tables and maps below are empty') + '. '
       + 'If you opened this file directly from disk, your browser blocks the data files — '
       + 'serve the <code>docs/</code> folder over HTTP instead. Otherwise reload the page.</div>');
     console.error('[showcase] data load failed:', file, err);
