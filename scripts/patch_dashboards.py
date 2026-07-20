@@ -47,10 +47,68 @@ SHELL = """<!--SHELL-->
   body.rs-maxi-lock{overflow:hidden}
   /* the pinned map's only exit on a phone is this control, so it must be a
      real touch target rather than Leaflet's 30px default */
-  @media (max-width:760px),(max-height:540px){
+  @media (pointer:coarse),(max-width:760px),(max-height:540px){
     .rs-fs a{min-width:44px;min-height:44px;line-height:44px}
+    /* The zoom pair is Leaflet's default and sits under the same thumb as the
+       control above, so it is raised with it. The .leaflet-touch variant is
+       named explicitly for parity with style.css: leaflet.css ships
+       `.leaflet-touch .leaflet-bar a{line-height:30px}` at the same (0,2,1)
+       specificity, and although SHELL is injected after leaflet.css here
+       (leaflet at line 8, <!--SHELL--> at 122) and so wins on order today,
+       relying on the pipeline's head order is not worth the saving.
+       This also finally lands line-height:44px on .rs-fs a itself, which the
+       lower-specificity `.rs-fs a{line-height:26px}` below has been overriding
+       since the block was written. */
+    .leaflet-container .leaflet-bar a,
+    .leaflet-container.leaflet-touch .leaflet-bar a{min-width:44px;min-height:44px;line-height:44px}
   }
   .rs-fs a{font-size:15px;line-height:26px;text-align:center;font-weight:600;cursor:pointer}
+  /* The generated week selector is a row of plain <div class="card"> nodes with
+     click listeners; the JS below promotes them to real buttons. The dashboard
+     CSS defines no focus style whatsoever, so supply the ring here. Amber on
+     the #020617 page is 9.4:1 and on the #1e293b .active fill 6.8:1, both well
+     past the 3:1 non-text minimum. The ring must sit outside the card's own 2px
+     border so it stays legible on the active card too. */
+  .cards>.card:focus{outline:3px solid #f59e0b;outline-offset:2px}
+  .cards>.card:focus:not(:focus-visible){outline:none}
+  .cards>.card:focus-visible{outline:3px solid #f59e0b;outline-offset:2px}
+  /* .cards is overflow-x:auto with no side padding, and an outline never counts
+     toward scrollable overflow, so the first and last card's ring would be cut
+     at the padding box. offset 2px + width 3px needs 5px; 6px leaves a margin.
+     Longhands only, so the generated vertical padding:8px 0 survives. */
+  .cards{padding-left:6px;padding-right:6px}
+  /* WCAG AA text contrast. Scoped to #app - the CNHR dashboard's whole body is
+     <div class="wrap" id="app"> - because SHELL also lands in surge_report.html,
+     which shares class names like .sub but is themed light/dark from style.css.
+     The generated palette's tertiary label colour #64748b measures 3.75:1 on the
+     #0f172a panel/stat/card surface, 4.03:1 on #0a0f1a, 4.24:1 on the #020617
+     body and 3.07:1 on the #1e293b active card. Every use is 9-11px normal or
+     600 weight, so AA asks 4.5:1. #7c8ba1 is the same hue and saturation nine
+     lightness steps up: 5.15 / 5.53 / 5.83:1, and 4.66:1 at worst on the tinted
+     .inf-box backgrounds. It stays a visible tier below #94a3b8 (6.96:1). */
+  #app .sub,#app .stat-label,#app .stat-sub,#app .panel-sub,#app .card-inf,
+  #app .inf-small,#app .cc-label,#app .cc-sub,#app .insight-trip .trip-num{color:#7c8ba1}
+  /* The selected week card lightens to #1e293b, where #7c8ba1 is only 4.22:1. */
+  #app .card.active .card-inf{color:#8b98ab}
+  /* Chart axis labels carry the colour as a presentation attribute; the CSS fill
+     property outranks it, and matching on the attribute leaves the #94a3b8 and
+     #a855f7 labels in the same <svg> alone. */
+  #app svg.chart text[fill="#64748b"]{fill:#7c8ba1}
+  /* "click to expand" is styled inline so it needs !important. The 13px #f8fafc
+     panel title sits inside a sibling <div>, so the child combinator misses it. */
+  #app .insights-toggle>span,#app .map-toggle>span{color:#7c8ba1!important}
+  /* .foot is #334155 on #020617 - 1.95:1, the worst on the page. Nothing that
+     dark reaches 4.5:1 on this background (the darkest slate that does is about
+     #647996 at 4.53:1), so #6c819d is close to the least lightening that clears
+     it, at 5.06:1, and still reads as the quietest tier. */
+  #app .foot{color:#6c819d}
+  /* The generated footer carries a bare <a> with no colour, so it falls back to
+     the UA default #0000ee - 2.15:1 on the #020617 body, the worst on the page.
+     Scoped AWAY from the Leaflet map: its controls and attribution sit on white
+     chrome, where a colour picked for a near-black page reads at 1.09:1. */
+  #app a{color:#7dd3fc}
+  #app .leaflet-container a{color:#005a8c}   /* 4.83:1 on the attribution bar */
+  #app .leaflet-container .leaflet-bar a{color:#333}  /* Leaflet's own, 12.6:1 */
 </style>
 <script>
 // 406 of 762 trips have no GPS track, but every row is click-wired to
@@ -196,6 +254,130 @@ window.addEventListener('load', function () {
     document.addEventListener('webkitfullscreenchange', onChange);
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && maxiOn()) setMaxi(false); });
   }, 250);
+});
+
+// The week selector is built as bare <div class="card"> nodes carrying only a
+// click listener (el() maps onClick straight to addEventListener), so it is
+// unreachable by Tab and dead to Enter/Space - a keyboard user cannot change
+// week at all. Promote each card to role=button + tabindex=0 and key it.
+// render() does app.innerHTML="" and rebuilds every card, so this cannot be a
+// one-shot pass: observe #app and re-upgrade whatever it re-emits. Only
+// childList is observed, so the attributes written below cannot re-trigger it.
+// No regular expressions anywhere here: SHELL is the replacement argument of an
+// re.sub, where a backslash escape would be reinterpreted or raise bad escape.
+window.addEventListener('load', function () {
+  var app = document.getElementById('app');
+  if (!app || app.__weekKeys) return;   // surge_report.html has no #app
+  app.__weekKeys = true;
+  var wantFocus = false;
+  var onKey = function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    e.preventDefault();                 // Space would otherwise scroll the page
+    wantFocus = true;                   // the click re-renders and drops focus
+    e.currentTarget.click();
+  };
+  // role=button is children-presentational: every figure inside the card
+  // (label, phase, trips, earnings, hours, rho, r_n, m~_n, BE/r*, and the
+  // 'no GPS route' tag added later by the decorate() pass) leaves the
+  // accessibility tree. Rebuild the whole lot into the name, from the leaf
+  // elements in document order, so nothing is lost to the promotion.
+  var nameOf = function (c) {
+    var parts = [];
+    Array.prototype.forEach.call(c.querySelectorAll('*'), function (k) {
+      if (k.children.length) return;    // containers, not text leaves
+      var t = (k.textContent || '').trim();
+      if (t) parts.push(t);
+    });
+    return parts.length ? 'Show ' + parts.join(', ') : '';
+  };
+  var upgrade = function () {
+    var cards = app.querySelectorAll('.cards>.card');
+    if (!cards.length) return;          // single-week dashboards emit no cards
+    var box = cards[0].parentNode;
+    if (!box.getAttribute('role')) {
+      box.setAttribute('role', 'group');
+      box.setAttribute('aria-label', 'Select week');
+    }
+    Array.prototype.forEach.call(cards, function (c) {
+      c.setAttribute('aria-pressed', c.classList.contains('active') ? 'true' : 'false');
+      // Recomputed every pass, never behind the __keyed guard: decorate() runs
+      // on a later frame and appends the no-GPS tag, which must reach the name.
+      var n = nameOf(c);
+      if (n && c.getAttribute('aria-label') !== n) c.setAttribute('aria-label', n);
+      if (c.__keyed) return;
+      c.__keyed = true;
+      c.setAttribute('role', 'button');
+      c.setAttribute('tabindex', '0');
+      c.addEventListener('keydown', onKey);
+    });
+    if (wantFocus) {
+      wantFocus = false;
+      var a = app.querySelector('.cards>.card.active');
+      if (a) a.focus();
+    }
+  };
+  if (window.MutationObserver) {
+    new MutationObserver(upgrade).observe(app, { childList: true, subtree: true });
+  }
+  upgrade();
+});
+
+// Every heatmap cell encodes its category, hour and intensity in a title
+// attribute on an empty div: mouse-only twice over. A div with no role is not
+// an object in the accessibility tree at all, so the title is never announced,
+// and a touch screen has no hover to fire it with. Promote each cell to
+// role="img" and reuse its own title as the accessible name, so the same words
+// become reachable by screen reader on keyboard and on touch. Deliberately NOT
+// focusable: a 17-column grid would add hundreds of tab stops, and a sighted
+// keyboard user can already read the row label, the hour header and the colour
+// legend. The grid is filled by a fetch that may land either side of load, so
+// label what is there and watch for what arrives.
+window.addEventListener('load', function () {
+  var heat = document.getElementById('heat');
+  if (!heat) return;                      // only the surge report has one
+  var label = function () {
+    Array.prototype.forEach.call(heat.querySelectorAll('.cell[title]'), function (c) {
+      if (c.getAttribute('role') === 'img') return;
+      c.setAttribute('role', 'img');
+      c.setAttribute('aria-label', c.getAttribute('title'));
+    });
+  };
+  label();
+  if (window.MutationObserver) new MutationObserver(label).observe(heat, { childList: true });
+});
+
+// State colours are written as INLINE style="color:..." by the generator, and one
+// class carries several of them (.card-phase is amber, green or red depending on
+// the week), so a CSS class override cannot fix them - it would repaint every
+// state the same. Remap the specific values instead.
+// Measured on the rendered page, compositing each 12.5%-alpha tint over its card:
+//   #059669 green  3.35-4.48:1   #dc2626 red  3.03-3.97:1   #ef4444  4.45:1
+// all below the 4.5:1 AA floor for text this size. The replacements keep the hue
+// and the semantic reading, and clear the floor on every surface they land on:
+//   #34d399  6.54:1     #f87171  5.29:1     #8b98ab  5.00:1
+// Backgrounds are left alone - they are decorative tints, not text.
+var RECOLOR = {
+  'rgb(5, 150, 105)': '#34d399', '#059669': '#34d399',
+  'rgb(220, 38, 38)': '#f87171', '#dc2626': '#f87171',
+  'rgb(239, 68, 68)': '#f87171', '#ef4444': '#f87171',
+  'rgb(100, 116, 139)': '#8b98ab', '#64748b': '#8b98ab'
+};
+window.addEventListener('load', function () {
+  var app = document.getElementById('app');
+  if (!app) return;
+  var fix = function () {
+    Array.prototype.forEach.call(app.querySelectorAll('[style*="color"]'), function (e) {
+      var c = e.style.color;
+      if (c && RECOLOR[c]) e.style.color = RECOLOR[c];
+    });
+    // Chart labels carry the colour as a presentation attribute instead.
+    Array.prototype.forEach.call(app.querySelectorAll('svg text[fill]'), function (e) {
+      var f = e.getAttribute('fill');
+      if (RECOLOR[f]) e.setAttribute('fill', RECOLOR[f]);
+    });
+  };
+  fix();
+  if (window.MutationObserver) new MutationObserver(fix).observe(app, { childList: true, subtree: true });
 });
 </script>
 <!--/SHELL-->"""

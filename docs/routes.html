@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 340 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=64">
+<link rel="stylesheet" href="assets/style.css?v=67">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -41,7 +41,7 @@
       <button data-mode="service">Service</button>
       <button data-mode="speed">Speed</button>
     </span>
-    <span id="stats" style="color:var(--muted)"></span>
+    <span id="stats" role="status" style="color:var(--muted);flex:1 1 16rem;min-width:0"></span>
   </div>
   <div class="legend" id="legend"></div>
   <div class="pbar" id="pbar">
@@ -53,7 +53,7 @@
     <input type="range" id="pbSeek" min="0" max="1000" value="0" aria-label="Playback position">
     <span class="spd" id="pbSpd">
       <input type="range" id="pbSpdRange" min="0" max="5" step="1" value="3"
-        aria-label="Playback speed, multiple of real time" title="Playback speed">
+        aria-label="Playback speed, multiple of real time" aria-valuetext="60× real time" title="Playback speed">
       <b id="pbSpdVal">60×</b>
     </span>
     <span class="rd" id="pbRead"></span>
@@ -90,7 +90,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=64"></script>
+<script src="assets/site.js?v=67"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -643,6 +643,10 @@ function pbReadout(leg) {
   for (let i = 0; i < pb.li; i++) if (pb.legs[i].seg === 'trip') { done++; gbp += pb.legs[i].props.gbp || 0; }
   const n = pb.legs.filter(l => l.seg === 'trip').length;
   pbEls.read.innerHTML = `<b>${hhmm(leg.abs + pb.lt)}</b> · <b>${Math.round(pb.spd)}</b> mph · Trip ${Math.min(done + 1, n)}/${n} · £${gbp.toFixed(2)}`;
+  // The seek slider is 0-1000 of the day, which announces as a bare "437".
+  // Same defect the speed slider had; give it the clock time it represents.
+  if (pbEls.seek) pbEls.seek.setAttribute('aria-valuetext',
+    `${hhmm(leg.abs + pb.lt)}, trip ${Math.min(done + 1, n)} of ${n}`);
 }
 function pbDayIdle(dayKey) {   // idle readout: real driving time, average speed, and what play will cost
   const { driveSec, distMi, legs } = dayLegs(dayKey);
@@ -929,8 +933,26 @@ function render(fit) {
     const t = feats.find(f => f.properties.seg === 'trip') || feats[0];
     const p = t.properties;
     const ppm = p.gbp && p.mi ? ` · £${(p.gbp / p.mi).toFixed(2)}/mi` : '';
-    stats.innerHTML = `<b>Isolated trip</b> — ${p.from || '?'} → ${p.to || '?'} · ${p.mi ?? '?'} mi` +
-      (p.gbp != null ? ` · £${p.gbp.toFixed(2)}${ppm}` : '') +
+    // The tooltips fire on mouseover only, so on a touch screen the trip's
+    // duration and speed — and the whole unpaid-approach story, which is the
+    // page's central argument — had no path at all. Isolating already works by
+    // tap, so the persistent readout it fills carries the same words. The
+    // en-route figures are measured here exactly as its own tooltip measures
+    // them (own geometry, own times), so the two never disagree.
+    const e = feats.find(f => f.properties.seg === 'enroute');
+    let en = '';
+    if (e) {
+      const emi = trackMiles([e]), et = e.properties.t;
+      const emin = et && et.length ? (et[et.length - 1] - et[0]) / 60 : null;
+      en = ` &nbsp;· en-route ${emi.toFixed(1)} mi` +
+        (emin != null ? ` · ${emin.toFixed(0)} min` : '') +
+        (emin ? ` · ${(emi / (emin / 60)).toFixed(0)} mph` : '') +
+        ` · <b>£0.00</b> unpaid`;
+    }
+    stats.innerHTML = `<b>Isolated trip</b> — ${p.from || '?'} → ${p.to || '?'}` +
+      (p.service ? ` · ${p.service.toLowerCase()}` : '') +
+      ` · ${p.mi ?? '?'} mi · ${p.min ?? '?'} min · ${p.mph ?? '?'} mph` +
+      (p.gbp != null ? ` · £${p.gbp.toFixed(2)}${ppm}` : '') + en +
       ` &nbsp;<span style="color:var(--s1)">click empty map to show all</span>`;
   } else {
     const trips = new Set(feats.filter(f => f.properties.seg === 'trip').map(f => f.properties.trip)).size;
@@ -1001,10 +1023,19 @@ getJSON('data/routes.json?v=29').then(d => {   // ?v bumped whenever the DATA ch
   const step = document.createElement('span');
   step.id = 'dayStep';
   step.className = 'ovonly';
+  // A disclosure, not a menu. role="menu" obliges the whole menu keyboard model
+  // - arrows, Home/End, roving tabindex, Escape to close - and Escape is the one
+  // key that cannot be had here: in native full screen the browser consumes it to
+  // exit (see the note below), and in the pinned fallback site.js already spends
+  // it on leaving full screen. It also costs something: only menuitem/group/
+  // separator are valid children of a menu, so the .mon month headings below are
+  // dropped from the accessibility tree. Plain buttons in a labelled group are
+  // already reachable by Tab and operable by Enter/Space, which is the behaviour
+  // that actually exists - and it matches the layers drawer in site.js.
   step.innerHTML = '<button type="button" aria-label="Previous day">&lsaquo;</button>' +
-                   '<button type="button" class="daylab" aria-haspopup="true" aria-expanded="false"></button>' +
+                   '<button type="button" class="daylab" aria-expanded="false" aria-controls="dayPickPanel"></button>' +
                    '<button type="button" aria-label="Next day">&rsaquo;</button>' +
-                   '<div class="daypick" role="menu" aria-label="Pick a day"></div>';
+                   '<div class="daypick" id="dayPickPanel" role="group" aria-label="Pick a day"></div>';
   const stepBtn = step.querySelectorAll('button');
   const stepPrev = stepBtn[0], stepLbl = stepBtn[1], stepNext = stepBtn[2];
   const pick = step.querySelector('.daypick');
@@ -1033,7 +1064,7 @@ getJSON('data/routes.json?v=29').then(d => {   // ?v bumped whenever the DATA ch
       const o = sel.options[i], mon = MONS[+o.value.slice(4, 6) - 1];
       if (mon !== lastMon) { html += `<div class="mon">${mon}</div>`; lastMon = mon; }
       const trips = (o.textContent.match(/(\d+) trip/) || [])[1] || '';
-      html += `<button type="button" role="menuitem" data-i="${i}">${+o.value.slice(6, 8)} ${mon}` +
+      html += `<button type="button" data-i="${i}">${+o.value.slice(6, 8)} ${mon}` +
               `<i>${trips} trip${trips === '1' ? '' : 's'}</i></button>`;
     }
     pick.innerHTML = html;
@@ -1066,8 +1097,13 @@ getJSON('data/routes.json?v=29').then(d => {   // ?v bumped whenever the DATA ch
     if (dis[1] && document.activeElement === stepNext) stepPrev.focus();
     stepPrev.disabled = dis[0];
     stepNext.disabled = dis[1];
-    pick.querySelectorAll('button').forEach(b =>
-      b.classList.toggle('on', +b.dataset.i === sel.selectedIndex));
+    pick.querySelectorAll('button').forEach(b => {
+      const on = +b.dataset.i === sel.selectedIndex;
+      b.classList.toggle('on', on);
+      // Which day is in view was a solid chip and nothing else. aria-current is
+      // what states it to a screen reader now these are plain buttons.
+      if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
+    });
   }
   pbar.prepend(step);          // first in the bar: selection precedes transport
   buildPick();
@@ -1197,6 +1233,6 @@ getJSON('data/routes.json?v=29').then(d => {   // ?v bumped whenever the DATA ch
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=64"></script>
+<script src="assets/nav.js?v=67"></script>
 </body>
 </html>

@@ -6,7 +6,7 @@
 <meta name="description" content="Pick any of seven GPS-tracked weeks and see every trip on one map, coloured by four-state, MNHR, earnings per hour or per mile. Click a route to isolate it.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Week deep dive — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=64">
+<link rel="stylesheet" href="assets/style.css?v=67">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 <style>
   .weekbar { position:sticky; top:var(--rsnav-h, 52px); z-index:5; background:var(--page); padding:10px 0 8px;
@@ -40,6 +40,17 @@
   /* the isolated row needs to be unmistakable — it is the only confirmation the click worked */
   #wkTable tr.sel td { background:color-mix(in srgb, var(--s1) 18%, transparent); font-weight:600; }
   #wkTable tr.noroute td { color:var(--muted); }
+  /* The row is NOT the control - the button in the # cell is. A <tr> cannot be a
+     button (role="button" would replace role="row" and orphan its 12 cells), so
+     the control sits inside the row. It has to read as the plain number it
+     replaced; :focus-visible in style.css draws the ring, and font:inherit picks
+     up the 600 weight that tr.sel td sets on the isolated row. font-variant-numeric
+     MUST follow font:inherit - the font shorthand resets every font-variant-*
+     longhand to initial, which would otherwise strip the tabular-nums that td
+     sets and leave this column's digits proportional while the other 11 stay
+     tabular. */
+  #wkTable .isobtn { font:inherit; font-variant-numeric:tabular-nums; color:inherit;
+    background:none; border:0; padding:0; cursor:pointer; text-align:left; }
 </style>
 </head>
 <body>
@@ -77,7 +88,7 @@
       <button data-mode="mnhr">MNHR</button>
       <button data-mode="per_hr">£ per hour</button>
       <button data-mode="per_mi">£ per mile</button>
-      <span id="wkStats" style="color:var(--muted)"></span>
+      <span id="wkStats" role="status" style="color:var(--muted);flex:1 1 16rem;min-width:0"></span>
     </div>
     <div class="mlegend" id="mlegend"></div>
     <div id="wmap"></div>
@@ -94,7 +105,7 @@
 
   <div class="panel">
     <h2>Trips this week</h2>
-    <div class="note">Click a row — or focus it and press Enter — to isolate that trip on the map.
+    <div class="note">Click a row — or tab to its trip number and press Enter — to isolate that trip on the map.
       Greyed rows have no GPS route recorded, so there is nothing to show.</div>
     <div id="wkTable"></div>
   </div>
@@ -102,7 +113,7 @@
   <footer class="site">Data: docs/data/weeks.json — extracted from the pipeline's metrics engine with GPS
   tracks re-derived from the raw GPX logs. Map tiles © OpenStreetMap / CARTO.</footer>
 </main>
-<script src="assets/site.js?v=64"></script>
+<script src="assets/site.js?v=67"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 // One source of truth for the four-state palette: the theme-aware CSS vars
@@ -217,15 +228,32 @@ function draw(fit) {
   const st = document.getElementById('wkStats');
   if (isolated) {
     const t = gps.find(x => x.n === isolated);
+    // Utilisation, rho, MNHR, the running total and recovery appear ONLY in the
+    // map tooltip, and a tooltip is mouse-only — no hover on a touch screen, and
+    // none from the keyboard path the table rows already offer. Isolating a trip
+    // is reachable both ways (tap a route, or focus a row and press Enter), so
+    // the isolated readout is where those figures belong. The rest of tipFor's
+    // content is already in the table columns.
     st.innerHTML = `<b>Trip #${t.n}</b> — ${t.from || '?'} → ${t.to || '?'} · ${money(t.earn)}`
-      + ` · ${t.mi ? t.mi.toFixed(1) + ' mi' : ''} <span style="color:var(--s1)">click empty map to show all</span>`;
+      + (t.mi ? ` · ${t.mi.toFixed(1)} mi` : '')
+      + ` · ${Math.round((t.util || 0) * 100)}% paid`
+      + ` · ρ ${money(t.rho)} paid / ${money(t.rho_true)} true`
+      + ` · MNHR ${money(t.mnhr)} / ${money(t.mnhr_ema)} EMA`
+      + ` · CNHR after ${money(t.rn)}/hr`
+      + ` · cumulative ${money(t.cum_e)} · ${(+t.cum_h || 0).toFixed(1)}h`
+      + ` · ${STATE_L[t.state] || t.state || '—'}, recovery ${Math.round(t.rec || 0)}%`
+      + ` <span style="color:var(--s1)">click empty map to show all</span>`;
   } else {
     st.textContent = `${gps.length} of ${WK.trips.length} trips have a GPS route`;
   }
   document.querySelectorAll('#wkTable tr[data-n]').forEach(r => {
     const on = +r.dataset.n === isolated;
     r.classList.toggle('sel', on);
-    r.setAttribute('aria-pressed', String(on));
+    // aria-pressed belongs to the button, never to the <tr>: a row has role="row",
+    // which has no pressed state, and unrouted rows have no control at all - this
+    // selector matches them too, so the state has to be guarded, not assumed.
+    const b = r.querySelector('.isobtn');
+    if (b) b.setAttribute('aria-pressed', String(on));
   });
   legend();
 }
@@ -252,12 +280,19 @@ function selectWeek(i) {
     + '<th class="num">£/hr</th><th class="num">£/mi</th><th class="num">CNHR</th><th>State</th></tr>'
     + WK.trips.map(t => {
       const routed = hasRoute(t);
-      // Only routed rows do anything, so only they advertise themselves as controls.
+      // A <tr> cannot BE a button: role="button" is a leaf role, so it replaces
+      // role="row" and orphans the 12 cells inside it, and aria-label on the row
+      // suppresses all of that row's data in a screen reader. Only routed rows do
+      // anything, so only they get a control - a real button in the # cell, which
+      // keeps the row a row and gets tab stop, Enter, Space and pressed state free.
+      const nCell = routed
+        ? `<button type="button" class="isobtn" aria-pressed="false"`
+          + ` aria-label="Isolate trip ${t.n} on the map">${t.n}</button>`
+        : String(t.n);
       return `<tr data-n="${t.n}" class="${routed ? 'hasroute' : 'noroute'}"`
-        + (routed ? ' tabindex="0" role="button" aria-pressed="false"'
-                    + ` aria-label="Isolate trip ${t.n} on the map"` : ' title="No GPS route recorded"')
+        + (routed ? '' : ' title="No GPS route recorded"')
         + '>'
-        + `<td>${t.n}</td><td>${t.day || ''}</td><td>${t.time || ''}</td><td>${t.svc || ''}</td>`
+        + `<td>${nCell}</td><td>${t.day || ''}</td><td>${t.time || ''}</td><td>${t.svc || ''}</td>`
         + `<td style="color:var(--ink2)">${t.from || '?'} → ${t.to || '?'}</td>`
         + `<td class="num">${money(t.earn)}</td><td class="num">${t.mins != null ? Math.round(t.mins) : '—'}</td>`
         + `<td class="num">${t.mi != null ? t.mi.toFixed(1) : '—'}</td>`
@@ -273,10 +308,13 @@ function selectWeek(i) {
       const isolating = isolated !== n;
       isolated = isolating ? n : null; lastClick = Date.now(); draw(isolating);
     };
+    // The button in the # cell is the real control: the browser gives it the tab
+    // stop plus Enter AND Space, so the hand-rolled keydown shim is gone. Stop its
+    // click here or it bubbles to the row handler below and toggles twice (net no-op).
+    r.querySelector('.isobtn').addEventListener('click', e => { e.stopPropagation(); go(); });
+    // Clicking anywhere on the row stays a pure mouse convenience. It exposes no
+    // keyboard or AT surface, so the row needs no role and no tabindex.
     r.addEventListener('click', go);
-    r.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
-    });
   });
   draw();
 }
@@ -327,6 +365,6 @@ getJSON('data/weeks.json?v=2').then(d => {
   }
 }).catch(dataFail('the week data'));
 </script>
-<script src="assets/nav.js?v=64"></script>
+<script src="assets/nav.js?v=67"></script>
 </body>
 </html>

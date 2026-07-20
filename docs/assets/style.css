@@ -1,10 +1,21 @@
 :root {
+  /* Selected-chip fill for controls rendered on the PAGE. --ov-on is scoped to
+     the map-overlay host, so without this the .daypick .on chip computes to no
+     background at all and its white label sits on the near-white panel. */
+  --ov-on-page:#2c3a44;
   color-scheme: light;
   /* --muted and --s1 carry small body text (labels, notes, links), so both are
      held at >=4.5:1 on --page and --surface. */
   --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#726f6a;
   --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,0.10);
   --s1:#2470cc; --s2:#1baf7a; --s3:#eda100; --s5:#4a3aa7; --s6:#e34948; --s8:#eb6834;
+  /* Solid fill sitting BEHIND white text (the playback Play button), kept
+     separate from --s1 because the two roles pull opposite ways: --s1 is read
+     as text/strokes on the page, so dark mode lightens it (#3987e5), which
+     left #fff on it at 3.64:1. This one is tuned the other way - dark enough
+     that #fff clears 4.5:1 in every scheme.
+     light #2470cc 4.93:1 | dark #1f66c2 5.62:1 | .rs-ov #14539e 7.61:1 */
+  --accent-solid:#2470cc;
   --good:#0f8a0f; --warn:#8a6100; --serious:#b4501f; --critical:#c02626;
   /* Four-state diagnostic. Used as text, so each theme needs its own value —
      no single hue clears 4.5:1 on both a near-white and a near-black panel. */
@@ -12,10 +23,12 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
+    --ov-on-page:#54697d;   /* 5.7:1 with white, 3.1:1 against --surface */
     color-scheme: dark;
     --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
     --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
     --s1:#3987e5; --s2:#199e70; --s3:#c98500; --s5:#9085e9; --s6:#e66767; --s8:#d95926;
+    --accent-solid:#1f66c2;
     --good:#4ade80; --warn:#fbbf24; --serious:#fb923c; --critical:#f87171;
     --st-sus:#4ade80; --st-acc:#22d3ee; --st-dec:#fbbf24; --st-stall:#f87171;
   }
@@ -70,7 +83,7 @@ svg text { font-family:inherit; }
 /* Day/week playback bar — the "ghost car" retraces a shift while routes build up. */
 .pbar { display:none; align-items:center; gap:10px; flex-wrap:wrap; margin:4px 0 8px; font-size:.8rem; }
 .pbar.on { display:flex; }
-.pbar .pbtn { font:inherit; font-weight:600; background:var(--s1); color:#fff; border:0; border-radius:8px;
+.pbar .pbtn { font:inherit; font-weight:600; background:var(--accent-solid); color:#fff; border:0; border-radius:8px;
   padding:9px 15px; cursor:pointer; min-width:104px; }
 .pbar .pbtn:hover { filter:brightness(1.08); }
 .pbar input[type=range] { flex:1 1 200px; min-width:150px; accent-color:var(--s1); height:24px; cursor:pointer; }
@@ -172,7 +185,7 @@ body.rs-maxi-lock { overflow:hidden; }
   --page:#efeade; --surface:#ffffff;
   --ink:#16202a; --ink2:#3a4650; --muted:#545f68;
   --grid:#e0dbd2; --axis:#c6c0b4; --border:rgba(30,45,58,.34);
-  --s1:#14539e; --warn:#7d5100;
+  --s1:#14539e; --accent-solid:#14539e; --warn:#7d5100;
   --ov-line:#8b949c; --ov-on:#2c3a44;
   /* The hosts live inside the map, so without this every adopted control
      inherits Leaflet's `12px/1.5 "Helvetica Neue"` instead of the page's type
@@ -239,14 +252,19 @@ body.rs-maxi-lock { overflow:hidden; }
   background:#f7f4ee; background:rgba(247,244,238,.98); border:1px solid rgba(30,45,58,.34);
   border-radius:11px; box-shadow:0 4px 22px rgba(24,34,44,.32); padding:10px; z-index:10; }
 .daypick.open { display:grid; grid-template-columns:repeat(auto-fill,minmax(78px,1fr)); gap:5px; }
+/* The panel above is pinned to a fixed light fill, so its month headings cannot
+   follow the page scheme: in dark mode var(--muted) resolves to #898781 and lands
+   on that near-white panel at 3.14:1. Pin the label to the light palette's muted
+   value, which is what the panel was designed against - 6.2:1 here. */
 .daypick .mon { grid-column:1/-1; font-size:.68rem; font-weight:700; letter-spacing:.06em;
-  text-transform:uppercase; color:var(--muted); padding:6px 2px 1px; }
+  text-transform:uppercase; color:#545f68; padding:6px 2px 1px; }
 .daypick button { font:inherit; font-size:.75rem; background:var(--surface); color:var(--ink);
   border:1px solid var(--ov-line); border-radius:8px; padding:6px 4px; cursor:pointer;
   line-height:1.25; text-align:center; }
-.daypick button.on { background:var(--ov-on); border-color:var(--ov-on); color:#fff; font-weight:600; }
+.daypick button.on { background:var(--ov-on,var(--ov-on-page)); border-color:var(--ov-on,var(--ov-on-page));
+  color:#fff; font-weight:600; }
 .daypick button i { display:block; font-style:normal; font-size:.66rem; color:var(--muted); }
-.daypick button.on i { color:#cfd8de; }
+.daypick button.on i { color:#e2e8f0; }   /* 9.5:1 on the light chip, 4.6:1 on the dark one */
 
 /* ---- speedometer (routes.html) ----
    A direct child of the map container, not an adopted node: it works the same
@@ -313,6 +331,47 @@ body.rs-maxi-lock { overflow:hidden; }
 tr[tabindex], .wk, .day, .controls button, .tile, a { outline-offset:2px; }
 :focus-visible { outline:2px solid var(--s1); outline-offset:2px; }
 tr[tabindex]:focus-visible { outline-offset:-2px; }
+
+/* ---- touch targets (WCAG 2.5.5 / 2.5.8) ----
+   Every control here is sized by the type scale plus 6-9px of padding, which
+   lands it between 24 and 42px: the colour-by buttons 33, the play bar's
+   toggles 31, the seek slider 24. The full-screen overlay's controls were
+   already raised (the compact block above), and so was the dashboards' exit
+   control (scripts/patch_dashboards.py); this does the same for the controls
+   that live on the page. Gated on a coarse pointer so a mouse keeps the dense
+   desktop density, with the narrow viewport kept as the fallback for browsers
+   that report no pointer capability. */
+@media (pointer:coarse), (max-width:760px) {
+  .controls button, .controls select, .modebtns button,
+  .pbar .pbtn, .pbar .ftog, .daypick button { min-height:44px; }
+  /* height, not min-height: a range input's box IS its hit area, and the
+     authored 24px above would otherwise stand. Wins on source order, so this
+     block must remain the last mention of the selector in this file. */
+  .pbar input[type=range] { height:44px; }
+  /* Padding rather than min-height, so the summary keeps its list-item box and
+     the ::before disclosure triangle stays on the first line of the label. */
+  .fskey summary { padding-top:13px; padding-bottom:13px; }
+  /* Leaflet's bar is 26px square by default - that is the zoom pair AND the
+     full-screen control on routes.html and week.html, whose twin in the
+     dashboards is already 44px.
+     BOTH selectors are load-bearing. leaflet.css loads AFTER this file
+     (routes.html:9-10, week.html:9-10) and ships
+       .leaflet-touch .leaflet-bar a { width:30px; height:30px; line-height:30px }
+     at the SAME (0,2,1) specificity as `.leaflet-container .leaflet-bar a`, so
+     on a touch device - exactly when this query matches - it would win the tie
+     on source order and leave the glyph sitting in the top 30px of a 44px box.
+     The min-* pair is safe either way (min-* always beats width/height); only
+     line-height is contested, so the second, (0,3,1) selector settles it. */
+  .leaflet-container .leaflet-bar a,
+  .leaflet-container.leaflet-touch .leaflet-bar a { min-width:44px; min-height:44px; line-height:44px; }
+  /* The overlay again, reached from a tablet - wide enough and tall enough
+     that neither dimension of the compact block above trips. Deliberately the
+     same declarations as lines 300-302; they cover different device classes,
+     so do not "de-duplicate" by deleting either set. */
+  .rs-ov .pbar .pbtn, .rs-ov .pbar .ftog,
+  .rs-ov .ovonly button, .rs-ov-tog, .rs-ov-drawtog { min-height:44px; }
+  .rs-ov .ovonly button { min-width:44px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important;

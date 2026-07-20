@@ -67,6 +67,19 @@
     '.rsdd .menu a i{display:block;font-style:normal;color:var(--n-mut);font-size:.74rem;margin-top:1px}',
     '@media(max-width:820px){.rsnav .in{flex-wrap:wrap;gap:1px}.rsnav a{padding:5px 7px;font-size:.8rem}',
     '  .rsnav .sp{flex-basis:100%;height:0}.rsdd .menu{right:auto;left:0}}',
+    /* Touch targets (WCAG 2.5.5). The toolbar links are ~30px tall - type plus
+       6px of padding - and the 820px rule takes them to ~27px, which is the
+       phone case. Raised on a coarse pointer only, so a mouse keeps the dense
+       bar. inline-flex because min-height alone would leave the label sitting
+       at the top of the taller box; the row gives back its own vertical
+       padding so this sticky bar does not grow by the full 14px. These rules
+       must live here rather than in style.css: the generated dashboards load
+       nav.js and not style.css. */
+    '@media(pointer:coarse),(max-width:760px){',
+    '  .rsnav .in{padding-top:2px;padding-bottom:2px}',
+    '  .rsnav .in > a{min-height:44px;display:inline-flex;align-items:center}',
+    '  .rsdd button{min-height:44px}',
+    '  .rsdd .menu a{min-height:44px}}',
     /* The skip link's hiding styles must live HERE, not in style.css: the
        generated dashboards load nav.js but not style.css, and an unstyled
        skip link renders as visible text above the toolbar. */
