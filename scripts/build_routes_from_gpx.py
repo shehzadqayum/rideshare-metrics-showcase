@@ -185,14 +185,53 @@ def trim_head(track, dist=HEAD_TRIM_M):
             return track[i:]
     return []
 
+# Doorstep suppression. The habitual-origin discs above protect places the
+# driver returns to, but every leg also *ends* at a passenger's door, and those
+# endpoints were published to five decimals (~1 m) next to a date and a clock
+# time while the stated policy is area-level only. Rounding the published
+# coordinate alone would be cosmetic, because the endpoint is simply the track's
+# own last point. So clip a per-trip distance off both ends of every leg: the
+# geometry then starts and stops on a road near the address instead of at it.
+# The distance comes from the trip id, so a rebuild reproduces the same output
+# rather than silently reshuffling what is published.
+END_MIN_M, END_MAX_M = 200.0, 400.0
+COORD_DP = 4                     # ~11 m — finer than that is not honest here
+
+def endpoint_trim(track, tid):
+    """Clip both ends of a leg by a per-trip distance; [] if too little is left."""
+    if len(track) < 2:
+        return []
+    h = int(hashlib.sha256(('end' + tid).encode()).hexdigest()[:8], 16)
+    d = END_MIN_M + (h % 10007) / 10007.0 * (END_MAX_M - END_MIN_M)
+    cut = trim_head(trim_head(track, d)[::-1], d)[::-1]
+    return cut if len(cut) >= 2 else []
+
 # Area labels must stay at locality/outcode granularity. The comma-split
 # fallback below can surface a street or a building entrance when the source
 # address has no locality in the expected position, so anything that still
 # looks like a street, venue or pick-up bay is demoted to plain "London".
+# Abbreviated suffixes matter as much as the spelled-out ones: "Oxeye Wy" is a
+# residential street and it walked straight through a filter that only knew
+# "way". A review found two such labels published, one attached to a
+# metre-precision dropoff carrying a date and a clock time.
+# Built from a word list rather than one long pattern, because the abbreviated
+# suffixes are the ones that leak: "Oxeye Wy" is a residential street and it
+# walked straight through a filter that only knew "way". A review found two such
+# labels published, one attached to a metre-precision dropoff carrying a date
+# and a clock time. A list is also far easier to extend than an escaped blob.
+STREET_WORDS = [
+    'street', 'st', 'road', 'rd', 'lane', 'ln', 'avenue', 'ave', 'av',
+    'close', 'cl', 'drive', 'dr', 'gardens', 'gdns', 'gdn', 'court', 'ct',
+    'way', 'wy', 'crescent', 'cres', 'terrace', 'ter', 'place', 'pl',
+    'square', 'sq', 'mews', 'walk', 'row', 'grove', 'rise', 'vale', 'mead',
+    'wharf', 'entrance', 'exit', 'house', 'flat', 'apartment',
+    'parking', 'level', 'station', 'platform',
+]
 STREETY = re.compile(
-    r'(\bstreet\b|\bst\b|\broad\b|\brd\b|\blane\b|\bln\b|\bavenue\b|\bave\b|\bclose\b|'
-    r'\bdrive\b|\bgardens\b|\bcourt\b|\bway\b|\bwharf\b|\bentrance\b|\bexit\b|'
-    r'\bpick-?up\b|\bplatform|\bparking\b|\blevel\b|\bstation\b|--|\[)', re.I)
+    r'\b(?:' + '|'.join(STREET_WORDS) + r')\b'      # any street-ish suffix
+    r'|pick-?up|--|\['                              # bay / pickup / junk markers
+    r'|^\s*\d+\s',                                  # leading house number
+    re.I)
 
 AREA_RE = re.compile(r'([A-Z]{1,2}[0-9][0-9A-Z]?)\s*[0-9][A-Z]{2}$')
 def area(addr):
@@ -313,8 +352,8 @@ def main():
     for it in pending:
         day = it['tid'][:8]
         r = day_radius(day)
-        enr = scrub_track(it['enr'], origins, r)
-        trp = scrub_track(it['trp'], origins, r)
+        enr = endpoint_trim(scrub_track(it['enr'], origins, r), it['tid'] + 'e')
+        trp = endpoint_trim(scrub_track(it['trp'], origins, r), it['tid'] + 't')
         dropped_legs += (len(it['enr']) >= 2 and len(enr) < 2) + (len(it['trp']) >= 2 and len(trp) < 2)
         if len(enr) < 2 and len(trp) < 2:
             continue
@@ -322,16 +361,16 @@ def main():
         week_cov[it['wk']]['gps'] += 1
         # dashboard keeps position-only [lat,lon] (no per-point time — it
         # doesn't animate); routes.json carries the timing for playback.
-        tracks_by_id[it['tid']] = {'enroute': [[a, b] for a, b, _ in enr],
-                                   'trip': [[a, b] for a, b, _ in trp]}
+        tracks_by_id[it['tid']] = {'enroute': [[round(a, COORD_DP), round(b, COORD_DP)] for a, b, _ in enr],
+                                   'trip': [[round(a, COORD_DP), round(b, COORD_DP)] for a, b, _ in trp]}
         fc = days.setdefault(day, [])
         if len(enr) >= 2:
             fc.append({'type': 'Feature',
-                       'geometry': {'type': 'LineString', 'coordinates': [[b, a] for a, b, _ in enr]},
+                       'geometry': {'type': 'LineString', 'coordinates': [[round(b, COORD_DP), round(a, COORD_DP)] for a, b, _ in enr]},
                        'properties': dict(it['props'], seg='enroute', **time_props(enr))})
         if len(trp) >= 2:
             fc.append({'type': 'Feature',
-                       'geometry': {'type': 'LineString', 'coordinates': [[b, a] for a, b, _ in trp]},
+                       'geometry': {'type': 'LineString', 'coordinates': [[round(b, COORD_DP), round(a, COORD_DP)] for a, b, _ in trp]},
                        'properties': dict(it['props'], seg='trip', **time_props(trp))})
     print(f'privacy pass: {dropped_legs} legs clipped away entirely')
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
+<meta name="description" content="Every GPS-tracked London journey on one map - 340 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
 <link rel="stylesheet" href="assets/style.css?v=64">
@@ -23,7 +23,9 @@
     segment, reconstructed by matching the phone's raw GPS track to the trip's start and end times, then
     tagged with its distance, duration, average speed and fare. Hover any line to see them. Colouring by
     <i>£ per mile</i> shows instantly why trip selection matters — visually, not as a spreadsheet.
-    Addresses are reduced to area level (e.g. “London N4”) for privacy.
+    Addresses are reduced to area level (e.g. “London N4”) for privacy, and every leg is clipped at both
+    ends so a route starts and finishes on a nearby road rather than at a door. Mapped mileage is therefore
+    a little shorter than the mileage actually driven.
   </div>
 
   <div class="explain" id="coverage" style="border-left-color:var(--s3)"></div>
@@ -939,7 +941,7 @@ function render(fit) {
   legend();
 }
 
-getJSON('data/routes.json?v=28').then(d => {   // ?v bumped whenever the DATA changes, not just its schema — a stale cache of a
+getJSON('data/routes.json?v=29').then(d => {   // ?v bumped whenever the DATA changes, not just its schema — a stale cache of a
   // privacy-scrubbed file is the one that matters, and v27 kept serving the
   // pre-scrub geometry to every returning visitor until this was noticed.
   DATA = d;

@@ -87,7 +87,8 @@
     Metrics on this page follow the <b>CNHR–MNHR framework</b> —
     <a href="framework.html">what every term means</a> ·
     <a href="https://github.com/shehzadqayum/cnhr-mnhr-framework">reference implementation on GitHub</a>.
-    Addresses are reduced to area level for privacy; en-route legs (the unpaid drive to each pickup) are
+    Addresses are reduced to area level for privacy, and each leg is clipped at both ends, so the pickup and
+    dropoff dots mark a nearby road rather than a door; en-route legs (the unpaid drive to each pickup) are
     drawn dashed and grey.
   </div>
 
@@ -280,7 +281,7 @@ function selectWeek(i) {
   draw();
 }
 
-getJSON('data/weeks.json').then(d => {
+getJSON('data/weeks.json?v=2').then(d => {
   DATA = d;
   document.getElementById('wkCount').textContent =
     `${d.weeks.length} weeks with GPS routes (${d.weeks.reduce((a, w) => a + w.gps, 0)} trips)`;

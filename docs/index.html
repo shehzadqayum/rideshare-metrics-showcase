@@ -61,7 +61,7 @@
       <div class="b">Every GPS-tracked journey on one map — filter by day, colour by segment type,
       £ per mile or service, hover any segment for its distance, speed and fare.</div></a>
     <a class="tile" href="week.html">
-      <div class="t">Week deep dive</div><div class="k">uber_screen · 7 GPS weeks · 356 trips</div>
+      <div class="t">Week deep dive</div><div class="k">uber_screen · 7 GPS weeks · 340 trips</div>
       <div class="b">Pick a week and see every tracked trip on one map, coloured by the metric you choose —
       four-state, MNHR, £/hour or £/mile. Click a route to isolate it; hover for its full numbers.</div></a>
     <a class="tile" href="metrics.html">
@@ -112,11 +112,12 @@
   </div>
 
   <footer class="site">Built with AI-assisted development (Claude Code). All figures are real, drawn from
-  the projects' own report files. Passenger names are removed and addresses reduced to area level.</footer>
+  the projects' own report files. Passenger names are removed, addresses reduced to area level, and mapped
+  routes clipped at both ends so no leg begins or ends at a door.</footer>
 </main>
 <script src="assets/site.js?v=64"></script>
 <script>
-Promise.all([getJSON('data/trips.json'), getJSON('data/charging.json'), getJSON('data/routes.json?v=28'), getJSON('data/metrics.json')])
+Promise.all([getJSON('data/trips.json'), getJSON('data/charging.json'), getJSON('data/routes.json?v=29'), getJSON('data/metrics.json')])
 .then(([t, c, r, m]) => {
   const segs = Object.values(r.days).reduce((a, d) => a + d.features.length, 0);
   const miles = trackMiles(Object.values(r.days).flatMap(d => d.features));   // measured, not double-counted
