@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=38">
+<link rel="stylesheet" href="assets/style.css?v=39">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -44,6 +44,8 @@
   <div class="legend" id="legend"></div>
   <div class="pbar" id="pbar">
     <button class="pbtn" id="pbBtn" type="button">▶ Play day</button>
+    <button class="ftog" id="pbFollow" type="button" aria-pressed="false"
+      title="Keep the car centred — the map moves with it">⌖ Follow</button>
     <input type="range" id="pbSeek" min="0" max="1000" value="0" aria-label="Playback position">
     <span class="spd" id="pbSpd" role="group" aria-label="Playback speed (multiple of real time)">
       <button data-s="1" type="button" title="Real time — one second per second">1×</button><button data-s="60" type="button" title="1 minute of driving per second">60×</button><button data-s="300" type="button" title="5 minutes of driving per second">300×</button><button data-s="1200" type="button" title="20 minutes of driving per second">1200×</button>
@@ -80,7 +82,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=38"></script>
+<script src="assets/site.js?v=39"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -149,6 +151,40 @@ function legend() {
 // (hybrid). The order and the speed are real; only the overall length is
 // compressed, and the clock shows the true time of day.
 let pb = null, userMult = null;   // userMult: a speed the viewer chose, kept across days
+let follow = false, ptrHeld = false, followFramed = false;
+
+// Follow mode: the map pans under the car to keep it centred.
+//
+// THE INVARIANT FROM THE FULL-SCREEN BUG HUNT APPLIES HERE IN FULL. Leaflet's
+// Draggable caches the pane position at pointerdown, so ANY map mutation landing
+// between that and the first drag frame teleports the gesture — which is exactly
+// the ~350 km jump that took four rounds to find. A per-frame pan is the most
+// dangerous possible version of that, so follow stands down for the whole time a
+// pointer is held and resumes on release.
+function pbFollowTo(latlng) {
+  if (!follow || ptrHeld) return;
+  if (map.dragging && map.dragging.moving()) return;
+  if (!followFramed) {
+    followFramed = true;
+    // Following at a whole-city zoom shows nothing moving, so close in once per
+    // engagement - on the first frame, so it works whether follow was switched
+    // on before playback started or during it. Zooming out by hand afterwards
+    // does not re-trigger it.
+    if (map.getZoom() < 13) { map.setView(latlng, 14, { animate: false }); return; }
+  }
+  const d = map.latLngToContainerPoint(latlng).subtract(map.getSize().divideBy(2));
+  // panBy translates the pane. setView would fire a viewreset and force every
+  // canvas layer to redraw — far too much for something called every frame.
+  if (Math.abs(d.x) > 1 || Math.abs(d.y) > 1) map.panBy(d, { animate: false });
+}
+function setFollow(on) {
+  follow = on;
+  if (!on) followFramed = false;      // next engagement frames the view again
+  const b = document.getElementById('pbFollow');
+  b.classList.toggle('on', on);
+  b.setAttribute('aria-pressed', String(on));
+  if (on && pb) pbFollowTo(pb.marker.getLatLng());
+}
 // Speed settings are TRUE multiples of real time: 1x really is one second of
 // driving per second. 60x - a minute of driving per second - is the default:
 // slow enough that traffic, junctions and motorway stretches still read as
@@ -343,6 +379,7 @@ function pbFrameRender() {
   const col = mode === 'speed' ? speedColor(inst) : pbStyle(leg).color;
   pb.marker.setLatLng(pos.latlng); pb.marker.setStyle({ fillColor: col });
   pb.halo.setLatLng(pos.latlng); pb.halo.setStyle({ fillColor: col });
+  pbFollowTo(pos.latlng);
   pbReadout(leg);
   const doneSec = leg.cumDur + pb.lt;
   const doneMi = leg.cumMi + leg.pfx[pos.j] + hmiles(leg.pts[pos.j], pos.latlng);
@@ -418,6 +455,7 @@ function pbTick(ts) {
       pb.idleUntil = ts + 1200; pb.last = null;
       const nxt = pb.legs[pb.li];
       pb.marker.setLatLng(nxt.pts[0]); pb.halo.setLatLng(nxt.pts[0]);
+      pbFollowTo(nxt.pts[0]);           // the car teleports across the wait; follow it
       // Nothing renders during the flash, so without this the gauge would hold
       // stale values while the clock visibly jumps — the car is parked, and the
       // time shown must be when the next job actually starts.
@@ -749,6 +787,18 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
       if (pb) pbRestyle(); else render(false);
     }));
 
+  // ---- follow mode ----
+  // The pointer guard is the load-bearing part: while the button is down,
+  // pbFollowTo refuses to touch the map (see the note on the function).
+  map.getContainer().addEventListener('pointerdown', () => { ptrHeld = true; }, true);
+  ['pointerup', 'pointercancel'].forEach(e =>
+    window.addEventListener(e, () => { ptrHeld = false; }, true));
+  window.addEventListener('blur', () => { ptrHeld = false; });
+  document.getElementById('pbFollow').addEventListener('click', () => setFollow(!follow));
+  // Dragging the map means "I want to look somewhere else" — disengage, the way
+  // navigation apps do, rather than fighting the viewer for the viewport.
+  map.on('dragstart', () => { if (follow) setFollow(false); });
+
   // ---- playback controls ----
   pbEls.btn.addEventListener('click', pbToggle);
   pbEls.seek.addEventListener('input', () => {
@@ -783,6 +833,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=38"></script>
+<script src="assets/nav.js?v=39"></script>
 </body>
 </html>

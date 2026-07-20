@@ -78,6 +78,10 @@ svg text { font-family:inherit; }
 .pbar .spd button { font:inherit; font-size:.74rem; background:var(--surface); color:var(--ink2);
   border:1px solid var(--border); border-radius:6px; padding:6px 9px; cursor:pointer; }
 .pbar .spd button.on { border-color:var(--s1); color:var(--s1); font-weight:600; }
+/* follow-the-car toggle */
+.pbar .ftog { font:inherit; font-size:.74rem; background:var(--surface); color:var(--ink2);
+  border:1px solid var(--border); border-radius:6px; padding:6px 9px; cursor:pointer; white-space:nowrap; }
+.pbar .ftog.on { border-color:var(--s1); color:var(--s1); font-weight:600; }
 .pbar .rd { color:var(--ink2); font-variant-numeric:tabular-nums; white-space:nowrap; }
 .pbar .rd b { color:var(--ink); }
 .pbar .pbnote { flex-basis:100%; color:var(--muted); font-size:.72rem; margin-top:-2px; }
@@ -183,9 +187,9 @@ body.rs-maxi-lock { overflow:hidden; }
 /* A control face has to read as a control against tiles, which the page's
    near-invisible border cannot do; and the "on" state becomes a solid chip
    because a border tint is not legible at a glance over a moving map. */
-.rs-ov .modebtns button, .rs-ov .controls button,
+.rs-ov .modebtns button, .rs-ov .controls button, .rs-ov .pbar .ftog,
 .rs-ov .pbar .spd button, .rs-ov .ovonly button { border-color:var(--ov-line); }
-.rs-ov .modebtns button.on, .rs-ov .controls button.on,
+.rs-ov .modebtns button.on, .rs-ov .controls button.on, .rs-ov .pbar .ftog.on,
 .rs-ov .pbar .spd button.on { background:var(--ov-on); border-color:var(--ov-on);
   color:#fff; font-weight:600; }
 .rs-ov .pbar, .rs-ov .legend, .rs-ov .modebtns { margin:0; }
@@ -291,7 +295,7 @@ body.rs-maxi-lock { overflow:hidden; }
   .rs-ov .pbar .pbtn { min-width:0; flex:0 0 auto; }
   /* comfortable touch targets, and the readout on its own line so the scrubber
      keeps a usable width on a phone */
-  .rs-ov .pbar .pbtn, .rs-ov .pbar .spd button { min-height:44px; }
+  .rs-ov .pbar .pbtn, .rs-ov .pbar .spd button, .rs-ov .pbar .ftog { min-height:44px; }
   .rs-ov .ovonly button, .rs-ov-tog, .rs-ov-drawtog { min-height:44px; }
   .rs-ov .ovonly button { min-width:44px; }
   .rs-ov .ovonly .daylab { min-width:62px; font-size:.74rem; }
