@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=42">
+<link rel="stylesheet" href="assets/style.css?v=44">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -84,7 +84,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=42"></script>
+<script src="assets/site.js?v=44"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -209,12 +209,25 @@ function pbFollowTo(latlng) {
   } catch (e) {}
   // A continuously sliding map is a vestibular trigger, and follow is the only
   // thing on this site that moves on its own, so reduce widens the ceiling too.
-  const cap = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.48 : FOLLOW_CAP;
-  sx = Math.min(sx, size.x * cap);
-  sy = Math.min(sy, size.y * cap);
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  sx = Math.min(sx, size.x * (reduce ? 0.48 : FOLLOW_CAP));
+  sy = Math.min(sy, size.y * (reduce ? 0.48 : FOLLOW_CAP));
   if (Math.abs(d.x) <= sx && Math.abs(d.y) <= sy) return;
-  // panBy translates the pane. setView would fire a viewreset on top.
-  map.panBy(d, { animate: false });
+
+  // Inside the window the trace runs free. AT the window edge the car holds
+  // station and the map slides under it — so pan by the OVERSHOOT only, never
+  // by the whole offset. Panning the whole offset snaps the car back to the
+  // middle of the window, and that snap is the lurch. The overshoot on any one
+  // frame is simply how far the car moved that frame, so the map tracks at
+  // exactly the car's own speed: continuous, and never a jump.
+  let ox = Math.round(Math.sign(d.x) * Math.max(0, Math.abs(d.x) - sx));
+  let oy = Math.round(Math.sign(d.y) * Math.max(0, Math.abs(d.y) - sy));
+  // Under reduce, prefer one infrequent discrete correction to a map that is
+  // permanently in motion — the opposite trade, and the right one there.
+  if (reduce) { ox = Math.round(d.x); oy = Math.round(d.y); }
+  // panBy fires moveend even when handed a zero offset, so never hand it one.
+  if (!ox && !oy) return;
+  map.panBy([ox, oy], { animate: false });
 }
 function setFollow(on) {
   follow = on;
@@ -938,6 +951,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=42"></script>
+<script src="assets/nav.js?v=44"></script>
 </body>
 </html>
