@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=58">
+<link rel="stylesheet" href="assets/style.css?v=59">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -49,8 +49,10 @@
     <button class="ftog" id="pbCont" type="button" aria-pressed="true"
       title="When a day finishes, roll straight on to the next one"><span aria-hidden="true">⟳</span> Continuous</button>
     <input type="range" id="pbSeek" min="0" max="1000" value="0" aria-label="Playback position">
-    <span class="spd" id="pbSpd" role="group" aria-label="Playback speed (multiple of real time)">
-      <button data-s="1" type="button" title="Real time — one second per second">1×</button><button data-s="5" type="button" title="5 seconds of driving per second — readable at street level">5×</button><button data-s="10" type="button" title="10 seconds of driving per second">10×</button><button data-s="60" type="button" title="1 minute of driving per second — best below street zoom">60×</button><button data-s="300" type="button" title="5 minutes of driving per second">300×</button><button data-s="1200" type="button" title="20 minutes of driving per second">1200×</button>
+    <span class="spd" id="pbSpd">
+      <input type="range" id="pbSpdRange" min="0" max="5" step="1" value="3"
+        aria-label="Playback speed, multiple of real time" title="Playback speed">
+      <b id="pbSpdVal">60×</b>
     </span>
     <span class="rd" id="pbRead"></span>
     <span class="pbnote">Played at the speed actually recorded by the GPS — traffic, stops and motorway are all real, and
@@ -86,7 +88,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=58"></script>
+<script src="assets/site.js?v=59"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -197,11 +199,14 @@ const FOLLOW_MIN = 0.12;   // floor, so a short day's window is not vanishingly 
 // which shows districts, not roads. The floor zooms in regardless and lets the
 // route overflow, which is the whole point of following the car.
 const FRAME_FILL = 0.85;
-// 19, not 20: the CARTO voyager layer serves no tiles above 19, so Leaflet
-// clamps the map's max zoom to it and 20 silently becomes 19 anyway. Naming the
-// real limit keeps the constant honest.
-const MIN_PLAY_Z = 19;
-const MAX_PLAY_Z = 19;
+// 15, chosen against the restored 60x default rather than picked. Zoom and speed
+// are one setting: measured across the 31 days, 60x crosses a full viewport in
+// 22.8 s at zoom 13, 11.4 s at 14, 5.7 s at 15 and 2.8 s at 16. 15 is the
+// closest framing that still gives the eye over five seconds of screen, which is
+// about the floor for following a moving trace. (The CARTO layer stops serving
+// tiles above 19, so that is the hard ceiling whatever else changes.)
+const MIN_PLAY_Z = 15;
+const MAX_PLAY_Z = 17;
 
 // Look-ahead. Rather than zooming out at speed - a zoom re-projects every path
 // and measured 9.4-12.5 ms against a 16.7 ms frame, against 1.2 ms for a pan -
@@ -211,7 +216,7 @@ const MAX_PLAY_Z = 19;
 // edge of the pan-free window by design, which alone puts it 119-170px ahead of
 // centre - so most of the frame is road already driven. The offset has to
 // exceed that window half-extent before it buys any forward view at all.
-const LOOK_MAX = 0.30;      // at full speed the car sits this far back, as a
+const LOOK_MAX = 0.42;      // at full speed the car sits this far back, as a
                             // fraction of the shorter viewport axis
 // A floor, not just a ceiling. The setback used to scale from zero, so in
 // traffic - where more than half the driving is - it was zero and the car sat
@@ -221,7 +226,9 @@ const LOOK_MAX = 0.30;      // at full speed the car sits this far back, as a
 // further in the zoom goes, and it eats the setback from the slow end first -
 // at z15 the 10-25 mph band fell to 1px before this floor existed, and at z16 it
 // fell back to 9px at 0.10. That band carries 54% of the driving.
-const LOOK_MIN = 0.22;
+// Must stay BELOW LOOK_MAX or the ramp inverts and the setback shrinks as the
+// car speeds up — which is the opposite of the point.
+const LOOK_MIN = 0.30;
 const LOOK_FULL_MPH = 45;   // speed at which the offset is fully extended
 const LOOK_TAU = 1.2;       // seconds of wall clock to ease toward a new heading,
                             // so a junction turns the frame rather than snapping it
@@ -362,14 +369,10 @@ function setFollow(on) {
   if (on && pb) pbFollowTo(pb.marker.getLatLng());
 }
 // Speed settings are TRUE multiples of real time: 1x really is one second of
-// driving per second.
-// The default is tied to the playback ZOOM, because the two are one setting in
-// disguise. At zoom 19 the viewport is 165 m across, so 60x crossed a full
-// screen 3.2 times a second - a strobe. 5x crosses it in about 3.7 s, which is
-// followable at building level. The cost is honest and worth knowing: a full
-// shift takes roughly two hours to play, so continuous day-to-day touring is no
-// longer the point of the feature. Raise this if the zoom ever comes back out.
-const PB_DEFAULT_MULT = 5;
+// driving per second. The slider steps through these; speed and playback zoom
+// are effectively one setting, so if one moves the other should be re-checked.
+const PB_MULTS = [1, 5, 10, 60, 300, 1200];
+const PB_DEFAULT_MULT = 60;
 const IDLE_SKIP = 60;       // gaps longer than this (real seconds) are skipped
 const pbEls = {};
 
@@ -521,7 +524,11 @@ function pbPosInLeg(leg, lt) {   // interpolate [lat,lng] at lt seconds into the
 }
 function pbProgress() { return pb ? (pb.legs[pb.li].cumDur + pb.lt) / pb.driveSec : 0; }
 function pbSyncMultBtns(m) {
-  document.querySelectorAll('#pbSpd button').forEach(x => x.classList.toggle('on', +x.dataset.s === m));
+  const i = Math.max(0, PB_MULTS.indexOf(m));
+  const r = document.getElementById('pbSpdRange');
+  if (r) { r.value = i; r.setAttribute('aria-valuetext', PB_MULTS[i] + '× real time'); }
+  const v = document.getElementById('pbSpdVal');
+  if (v) v.textContent = PB_MULTS[i] + '×';
 }
 function pbAddSeg(leg, i) {      // one laid-down segment, coloured by its speed
   L.polyline([leg.pts[i], leg.pts[i + 1]], {
@@ -1083,13 +1090,12 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
     if (!pb && !pbInit(sel.value)) return;
     pb.scrubbing = true; pbSeek(pbEls.seek.value / 1000); pb.scrubbing = false;
   });
-  document.querySelectorAll('#pbSpd button').forEach(b =>
-    b.addEventListener('click', () => {
-      document.querySelectorAll('#pbSpd button').forEach(x => x.classList.remove('on'));
-      b.classList.add('on');
-      userMult = +b.dataset.s;          // an explicit choice, kept across day changes
-      if (pb) pb.mult = userMult;
-    }));
+  document.getElementById('pbSpdRange').addEventListener('input', e => {
+    userMult = PB_MULTS[+e.target.value];   // an explicit choice, kept across day changes
+    pbSyncMultBtns(userMult);
+    if (pb) pb.mult = userMult;
+    else pbBtnLabel();                      // refresh the idle "plays in ~" estimate
+  });
   document.addEventListener('keydown', e => {
     // Anchors were missing from the old tag test, so Space on the focused
     // full-screen control played the day instead of toggling full screen.
@@ -1106,6 +1112,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=58"></script>
+<script src="assets/nav.js?v=59"></script>
 </body>
 </html>

@@ -74,10 +74,14 @@ svg text { font-family:inherit; }
   padding:9px 15px; cursor:pointer; min-width:104px; }
 .pbar .pbtn:hover { filter:brightness(1.08); }
 .pbar input[type=range] { flex:1 1 200px; min-width:150px; accent-color:var(--s1); height:24px; cursor:pointer; }
-.pbar .spd { display:inline-flex; gap:3px; }
-.pbar .spd button { font:inherit; font-size:.74rem; background:var(--surface); color:var(--ink2);
-  border:1px solid var(--border); border-radius:6px; padding:6px 9px; cursor:pointer; }
-.pbar .spd button.on { border-color:var(--s1); color:var(--s1); font-weight:600; }
+/* Speed is a slider now, not a row of buttons: the multiples span 1x to 1200x,
+   which reads as a continuum rather than a set of modes. The value sits beside
+   it because a slider with no readout says nothing about where it is. */
+.pbar .spd { display:inline-flex; align-items:center; gap:8px; flex:0 0 auto; }
+/* overrides the seek bar's flex sizing, which would otherwise stretch this too */
+.pbar .spd input[type=range] { flex:0 0 108px; width:108px; min-width:0; }
+.pbar .spd b { font-size:.76rem; font-variant-numeric:tabular-nums; min-width:42px;
+  text-align:right; color:var(--ink); }
 /* follow-the-car toggle */
 .pbar .ftog { font:inherit; font-size:.74rem; background:var(--surface); color:var(--ink2);
   border:1px solid var(--border); border-radius:6px; padding:6px 9px; cursor:pointer; white-space:nowrap; }
@@ -87,7 +91,7 @@ svg text { font-family:inherit; }
 .pbar .pbnote { flex-basis:100%; color:var(--muted); font-size:.72rem; margin-top:-2px; }
 @media (max-width:640px) {
   .pbar .pbtn { min-width:0; flex:1 1 46%; padding:12px 15px; }
-  .pbar .spd button { padding:9px 12px; }
+  .pbar .spd input[type=range] { flex:0 0 92px; width:92px; }
   .pbar .rd { flex-basis:100%; }
 }
 table { border-collapse:collapse; width:100%; font-size:.8rem; }
@@ -188,10 +192,8 @@ body.rs-maxi-lock { overflow:hidden; }
    near-invisible border cannot do; and the "on" state becomes a solid chip
    because a border tint is not legible at a glance over a moving map. */
 .rs-ov .modebtns button, .rs-ov .controls button, .rs-ov .pbar .ftog,
-.rs-ov .pbar .spd button, .rs-ov .ovonly button { border-color:var(--ov-line); }
+.rs-ov .ovonly button { border-color:var(--ov-line); }
 .rs-ov .modebtns button.on, .rs-ov .controls button.on, .rs-ov .pbar .ftog.on,
-.rs-ov .pbar .spd button.on { background:var(--ov-on); border-color:var(--ov-on);
-  color:#fff; font-weight:600; }
 .rs-ov .pbar, .rs-ov .legend, .rs-ov .modebtns { margin:0; }
 .rs-ov .pbnote { display:none; }          /* the standing explanation belongs on the page */
 .rs-ov .legend { margin-top:9px; gap:11px; }
@@ -295,7 +297,7 @@ body.rs-maxi-lock { overflow:hidden; }
   .rs-ov .pbar .pbtn { min-width:0; flex:0 0 auto; }
   /* comfortable touch targets, and the readout on its own line so the scrubber
      keeps a usable width on a phone */
-  .rs-ov .pbar .pbtn, .rs-ov .pbar .spd button, .rs-ov .pbar .ftog { min-height:44px; }
+  .rs-ov .pbar .pbtn, .rs-ov .pbar .ftog { min-height:44px; }
   .rs-ov .ovonly button, .rs-ov-tog, .rs-ov-drawtog { min-height:44px; }
   .rs-ov .ovonly button { min-width:44px; }
   .rs-ov .ovonly .daylab { min-width:62px; font-size:.74rem; }
