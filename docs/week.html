@@ -6,7 +6,7 @@
 <meta name="description" content="Pick any of seven GPS-tracked weeks and see every trip on one map, coloured by four-state, MNHR, earnings per hour or per mile. Click a route to isolate it.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Week deep dive — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=68">
+<link rel="stylesheet" href="assets/style.css?v=69">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 <style>
   .weekbar { position:sticky; top:var(--rsnav-h, 52px); z-index:5; background:var(--page); padding:10px 0 8px;
@@ -16,7 +16,8 @@
   .wk { background:var(--surface); border:1px solid var(--border); border-radius:9px; padding:8px 13px;
     cursor:pointer; text-align:left; font:inherit; color:var(--ink); line-height:1.25; }
   .wk:hover { border-color:var(--s1); }
-  .wk.on { border-color:var(--s1); background:color-mix(in srgb, var(--s1) 12%, var(--surface)); }
+  /* fallback first, color-mix second - same cascade idiom as 100vh/100dvh in style.css; a pre-2023 engine drops the invalid color-mix line and keeps the flat tint composited over var(--surface), so the base surface stays theme-correct and only the tint hue is frozen */
+  .wk.on { border-color:var(--s1); background:linear-gradient(rgba(46,123,216,.12),rgba(46,123,216,.12)), var(--surface); background:color-mix(in srgb, var(--s1) 12%, var(--surface)); }
   .wk .d1 { font-weight:650; font-size:.86rem; }
   .wk .d2 { font-size:.71rem; color:var(--muted); }
   /* z-index:0 traps Leaflet's own panes (400) and controls (1000) inside the
@@ -36,9 +37,9 @@
   .swatch { display:inline-flex; align-items:center; gap:5px; }
   .swatch i { width:11px; height:11px; border-radius:3px; display:inline-block; }
   #wkTable tr.hasroute { cursor:pointer; }
-  #wkTable tr.hasroute:hover td { background:color-mix(in srgb, var(--s1) 7%, transparent); }
+  #wkTable tr.hasroute:hover td { background:rgba(46,123,216,.07); background:color-mix(in srgb, var(--s1) 7%, transparent); }
   /* the isolated row needs to be unmistakable — it is the only confirmation the click worked */
-  #wkTable tr.sel td { background:color-mix(in srgb, var(--s1) 18%, transparent); font-weight:600; }
+  #wkTable tr.sel td { background:rgba(46,123,216,.18); background:color-mix(in srgb, var(--s1) 18%, transparent); font-weight:600; }
   #wkTable tr.noroute td { color:var(--muted); }
   /* The row is NOT the control - the button in the # cell is. A <tr> cannot be a
      button (role="button" would replace role="row" and orphan its 12 cells), so
@@ -113,7 +114,7 @@
   <footer class="site">Data: docs/data/weeks.json — extracted from the pipeline's metrics engine with GPS
   tracks re-derived from the raw GPX logs. Map tiles © OpenStreetMap / CARTO.</footer>
 </main>
-<script src="assets/site.js?v=68"></script>
+<script src="assets/site.js?v=69"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 // One source of truth for the four-state palette: the theme-aware CSS vars

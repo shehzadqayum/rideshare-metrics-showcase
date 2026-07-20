@@ -15,6 +15,39 @@ import io, os, re
 DOCS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'docs')
 DASHBOARDS = ['cnhr_dashboard.html', 'surge_report.html']
 
+# The generated dashboards hard-code their own ?v= keys for the shared assets,
+# and nothing kept them in step with the hand-written pages: all three sat on
+# v=64 while the site had moved to v=69, so every dashboard was serving five
+# versions of stale CSS and JS. Read the live key from index.html - one source
+# of truth - and rewrite it into every file under docs/dashboards/, including
+# cnhr_week_20260209.html, which is not in DASHBOARDS and so receives no SHELL.
+ASSET_RE = re.compile(r'(assets/(?:style\.css|site\.js|nav\.js)\?v=)(\d+)')
+
+def site_asset_versions():
+    """Per-asset keys as index.html has them. Deliberately NOT one shared number:
+    bumping only the asset that actually changed is correct, so style.css and
+    site.js can sit on 69 while nav.js stays on 68."""
+    idx = io.open(os.path.join(DOCS, 'index.html'), encoding='utf-8').read()
+    out = {}
+    for m in ASSET_RE.finditer(idx):
+        out[m.group(1)] = m.group(2)
+    if not out:
+        raise SystemExit('no asset keys found in index.html')
+    return out
+
+def sync_asset_keys(versions):
+    changed = []
+    for name in sorted(os.listdir(os.path.join(DOCS, 'dashboards'))):
+        if not name.endswith('.html'):
+            continue
+        fp = os.path.join(DOCS, 'dashboards', name)
+        s = io.open(fp, encoding='utf-8', errors='ignore').read()
+        new = ASSET_RE.sub(lambda m: m.group(1) + versions.get(m.group(1), m.group(2)), s)
+        if new != s:
+            io.open(fp, 'w', encoding='utf-8', newline='\n').write(new)
+            changed.append(name)
+    return changed
+
 FAVICON = ("<link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' "
            "viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E\">")
 
@@ -61,6 +94,26 @@ SHELL = """<!--SHELL-->
        since the block was written. */
     .leaflet-container .leaflet-bar a,
     .leaflet-container.leaflet-touch .leaflet-bar a{min-width:44px;min-height:44px;line-height:44px}
+    /* The generated dashboard's OWN controls, which the block above never reached.
+       Measured at 375x812: the chart series toggles and the CSV download (.btn,
+       cnhr_dashboard.html:36, padding:5px 10px/font-size:10px) 48-68x26; the map
+       colour-by buttons (:110, padding:3px 7px/font-size:9px) 33-46x20, short in
+       BOTH dimensions, hence min-width here as well as min-height; the show-all
+       button (:115) 90x26; and the map collapse header (:104) 309x39.
+       .insights-toggle measures 309x56 and already passes - it is named only so a
+       future generator change cannot quietly shrink its twin.
+       No per-file guard is needed even though SHELL also lands in
+       surge_report.html: loaded and queried at runtime, that page yields 0
+       elements for .btn, .map-color-btn, .map-show-all-btn, .map-toggle AND
+       .insights-toggle, so every selector below is inert there. Its only textual
+       mentions of the last two are this SHELL's own #app-scoped contrast rule, and
+       surge has no #app (it has #heat).
+       .map-color-btns is position:absolute with flex-wrap:wrap over the map, so
+       the widening was measured rather than assumed: after this rule the row is
+       234x44 inside a 273px map, every button shares one offsetTop (no wrap), and
+       documentElement.scrollWidth stays at 375. */
+    .btn,.map-color-btn,.map-show-all-btn{min-width:44px;min-height:44px}
+    .map-toggle,.insights-toggle{min-height:44px}
   }
   .rs-fs a{font-size:15px;line-height:26px;text-align:center;font-weight:600;cursor:pointer}
   /* The generated week selector is a row of plain <div class="card"> nodes with
@@ -466,6 +519,12 @@ def patch(path):
         io.open(path, 'w', encoding='utf-8', newline='\n').write(s)
     return log
 
+
+_v = site_asset_versions()
+_synced = sync_asset_keys(_v)
+print('asset keys      -> %s%s' % (
+    ', '.join('%s%s' % (k.split('/')[-1], v) for k, v in sorted(_v.items())),
+    (' (updated ' + ', '.join(_synced) + ')') if _synced else ' (already in step)'))
 
 for fn in DASHBOARDS:
     p = os.path.join(DOCS, 'dashboards', fn)

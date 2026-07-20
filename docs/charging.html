@@ -6,7 +6,7 @@
 <meta name="description" content="EV charging invoices from four networks parsed by AI into per-session records - the cost side of every profitability figure on this site.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>EV running costs — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=68">
+<link rel="stylesheet" href="assets/style.css?v=69">
 </head>
 <body>
 <main class="wrap" id="rsmain">
@@ -37,12 +37,21 @@
     <h2>When charging happens</h2>
     <div class="note">Session count by time of day — overnight charging is cheapest</div>
     <div id="tod"></div>
+    <div id="todTbl"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Weekly detail</h2>
+    <div class="note">The same 17 weeks the energy chart plots, as numbers. Every other chart on this
+      site is backed by a table (see the earnings and metrics pages); these two were not, so their
+      values existed only inside a mouse-only tooltip.</div>
+    <div id="wkTbl"></div>
   </div>
 
   <footer class="site">Tool: Python CLI over the Anthropic API, per-file extraction cache, 82 sessions
   across 19 locations and 4 providers.</footer>
 </main>
-<script src="assets/site.js?v=68"></script>
+<script src="assets/site.js?v=69"></script>
 <script>
 getJSON('data/charging.json').then(c => {
   document.getElementById('hero').innerHTML =
@@ -63,6 +72,16 @@ getJSON('data/charging.json').then(c => {
     '</table>';
   barChart(document.getElementById('tod'),
     Object.entries(c.by_time).map(([k, v]) => ({ label: k, short: k.split(' ')[0], v: v.sessions })), {});
+  document.getElementById('wkTbl').innerHTML =
+    '<table><tr><th>Week</th><th class="num">kWh</th><th class="num">Cost</th></tr>' +
+    Object.entries(c.by_week).map(([k, v]) =>
+      `<tr><td>${k}</td><td class="num">${fmt(v.kwh, 1)}</td><td class="num">£${fmt(v.cost, 2)}</td></tr>`).join('') +
+    '</table>';
+  document.getElementById('todTbl').innerHTML =
+    '<table><tr><th>Time of day</th><th class="num">Sessions</th><th class="num">kWh</th></tr>' +
+    Object.entries(c.by_time).map(([k, v]) =>
+      `<tr><td>${k}</td><td class="num">${v.sessions}</td><td class="num">${fmt(v.kwh, 1)}</td></tr>`).join('') +
+    '</table>';
 }).catch(dataFail('the charging data'));
 </script>
 <script src="assets/nav.js?v=68"></script>

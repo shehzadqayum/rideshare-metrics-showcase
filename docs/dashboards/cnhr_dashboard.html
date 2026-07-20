@@ -159,6 +159,26 @@ tr.map-selected{background:#1e293b!important;outline:1px solid #3b82f6}
        since the block was written. */
     .leaflet-container .leaflet-bar a,
     .leaflet-container.leaflet-touch .leaflet-bar a{min-width:44px;min-height:44px;line-height:44px}
+    /* The generated dashboard's OWN controls, which the block above never reached.
+       Measured at 375x812: the chart series toggles and the CSV download (.btn,
+       cnhr_dashboard.html:36, padding:5px 10px/font-size:10px) 48-68x26; the map
+       colour-by buttons (:110, padding:3px 7px/font-size:9px) 33-46x20, short in
+       BOTH dimensions, hence min-width here as well as min-height; the show-all
+       button (:115) 90x26; and the map collapse header (:104) 309x39.
+       .insights-toggle measures 309x56 and already passes - it is named only so a
+       future generator change cannot quietly shrink its twin.
+       No per-file guard is needed even though SHELL also lands in
+       surge_report.html: loaded and queried at runtime, that page yields 0
+       elements for .btn, .map-color-btn, .map-show-all-btn, .map-toggle AND
+       .insights-toggle, so every selector below is inert there. Its only textual
+       mentions of the last two are this SHELL's own #app-scoped contrast rule, and
+       surge has no #app (it has #heat).
+       .map-color-btns is position:absolute with flex-wrap:wrap over the map, so
+       the widening was measured rather than assumed: after this rule the row is
+       234x44 inside a 273px map, every button shares one offsetTop (no wrap), and
+       documentElement.scrollWidth stays at 375. */
+    .btn,.map-color-btn,.map-show-all-btn{min-width:44px;min-height:44px}
+    .map-toggle,.insights-toggle{min-height:44px}
   }
   .rs-fs a{font-size:15px;line-height:26px;text-align:center;font-weight:600;cursor:pointer}
   /* The generated week selector is a row of plain <div class="card"> nodes with
@@ -1468,7 +1488,7 @@ render();
 })();
 </script>
 <!--/MAPFX-->
-<script src="../assets/nav.js?v=64"></script>
+<script src="../assets/nav.js?v=68"></script>
 <!--TIDY-->
 <script>
 (function(){

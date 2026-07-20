@@ -351,6 +351,28 @@ tr[tabindex]:focus-visible { outline-offset:-2px; }
   /* Padding rather than min-height, so the summary keeps its list-item box and
      the ::before disclosure triangle stays on the first line of the label. */
   .fskey summary { padding-top:13px; padding-bottom:13px; }
+  /* week.html's per-trip isolate control. `#wkTable .isobtn` (week.html:52) sets
+     padding:0 and border:0 so the button keeps reading as the plain number it
+     replaced, which left it at 6.9x18.5 for a single digit - the smallest target
+     on the site. Only display/align-items/min-* are set here, none of which the
+     page rule declares, so the two never collide and the load order of this file
+     against week.html's inline <style> is irrelevant. inline-flex because
+     min-height alone would strand the digit at the top of a 44px box; rows that
+     hold a button go from 31px at their shortest to 57px, which incidentally
+     raises the row-click convenience target too. The table lives in
+     .panel{overflow-x:auto}, so the 661->691px growth scrolls in place and never
+     reaches the page. Unqualified on purpose: .isobtn also appears, 79 times, in
+     docs/dashboards/cnhr_week_20260209.html, which loads this file and has no
+     SHELL of its own - see the note on its ?v=64 pin below. */
+  .isobtn { display:inline-flex; align-items:center; min-width:44px; min-height:44px; }
+  /* demand.html's congestion-heat checkbox (demand.html:73). The <input> keeps the
+     UA's 13x13, but the wrapping <label> is the activation area, so the label's
+     box is what WCAG measures - 301x24 before this. .hs is already display:flex
+     with align-items:center, so min-height centres the row instead of
+     top-aligning it. Qualified as label.hs deliberately: the same class is on the
+     five non-interactive marker-legend rows directly above it (demand.html:67-72),
+     which are not targets and must stay at 24px. */
+  label.hs { min-height:44px; }
   /* Leaflet's bar is 26px square by default - that is the zoom pair AND the
      full-screen control on routes.html and week.html, whose twin in the
      dashboards is already 44px.

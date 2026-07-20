@@ -17,6 +17,16 @@ const card = (v, l, d) => `<div class="card"><div class="v">${v}</div><div class
 const tipEl = () => document.getElementById('tip');
 function bindTips(root) {
   root.querySelectorAll('[data-tip]').forEach(p => {
+    // The tooltip is bound to mousemove alone, so on a touch screen and to a
+    // screen reader the value in data-tip is unreachable. Reuse the same words
+    // as the element's accessible name - the technique patch_dashboards.py
+    // already applies to the surge report's heatmap cells. Every tipped mark is
+    // a leaf graphic (SVG <path>/<circle>, heat <div>), so role=img is the right
+    // mapping and no focus handling or extra widget is needed.
+    if (!p.hasAttribute('aria-label')) {
+      p.setAttribute('role', 'img');
+      p.setAttribute('aria-label', p.dataset.tip);
+    }
     p.addEventListener('mousemove', e => {
       const t = tipEl();
       t.innerHTML = e.target.dataset.tip;
