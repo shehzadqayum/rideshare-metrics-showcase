@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=59">
+<link rel="stylesheet" href="assets/style.css?v=60">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -88,7 +88,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=59"></script>
+<script src="assets/site.js?v=60"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -471,7 +471,7 @@ function dayLegs(dayKey) {
   (DATA.days[dayKey].features || []).forEach(f => {
     (byTrip[f.properties.trip] = byTrip[f.properties.trip] || {})[f.properties.seg] = f;
   });
-  const legs = [];
+  let legs = [];
   Object.keys(byTrip).sort().forEach(id => {          // enroute then paid trip
     ['enroute', 'trip'].forEach(seg => {
       const f = byTrip[id][seg];
@@ -483,10 +483,64 @@ function dayLegs(dayKey) {
     });
   });
   // absolute (midnight-unwrapped) start, idle gaps, cumulative duration + day totals
-  let off = 0, prev = -1, driveSec = 0, distMi = 0, curId = null, tSec0 = 0, tMi0 = 0;
-  legs.forEach((l, i) => {
+  // ---- pass 1: absolute start times, unwrapped across midnight ----
+  let off = 0, prev = -1;
+  legs.forEach(l => {
     if (prev >= 0 && l.s0 < prev - 3600) off += 86400;   // crossed midnight
     l.abs = l.s0 + off; prev = l.s0;
+  });
+
+  // ---- pass 2: make the timeline monotonic ----
+  // The pipeline slices ONE continuous GPS track by trip timestamps, and those
+  // windows overlap: measured across the 31 days, 316 of 647 consecutive leg
+  // pairs start before the previous one ended - 209 of them an approach running
+  // past its own trip's start - and 310 of those share actual GPS positions.
+  // Played strictly in order that rewinds the car and retraces ground it has
+  // already covered, which is exactly what it looked like.
+  // The paid trip is authoritative: its times come from the portal. So the
+  // EN-ROUTE leg yields, at whichever end the collision happens.
+  const clipHead = (l, sec) => {
+    const base = l.t[0];
+    let j = 0;
+    while (j < l.t.length - 1 && (l.t[j] - base) < sec) j++;
+    if (!j) return true;
+    const shift = l.t[j] - base;
+    l.pts = l.pts.slice(j); l.t = l.t.slice(j);
+    l.abs += shift; l.s0 += shift;
+    l.dur = Math.max(1, l.t[l.t.length - 1] - l.t[0]);
+    return l.pts.length >= 2;
+  };
+  const clipTail = (l, sec) => {
+    const end = l.t[l.t.length - 1];
+    let j = l.t.length - 1;
+    while (j > 0 && (end - l.t[j]) < sec) j--;
+    if (j === l.t.length - 1) return true;
+    l.pts = l.pts.slice(0, j + 1); l.t = l.t.slice(0, j + 1);
+    l.dur = Math.max(1, l.t[j] - l.t[0]);
+    return l.pts.length >= 2;
+  };
+  // Built as a new list rather than filtered in place, so a leg that is clipped
+  // away entirely cannot go on constraining the leg after it.
+  const kept = [];
+  legs.forEach((l, i) => {
+    if (l.seg !== 'enroute') { kept.push(l); return; }
+    const before = kept[kept.length - 1], after = legs[i + 1];
+    let ok = true;
+    if (before) {
+      const into = (before.abs + before.dur) - l.abs;
+      if (into > 0) ok = clipHead(l, into);
+    }
+    if (ok && after) {
+      const past = (l.abs + l.dur) - after.abs;
+      if (past > 0) ok = clipTail(l, past);
+    }
+    if (ok) kept.push(l);
+  });
+  legs = kept;
+
+  // ---- pass 3: cumulative measures, job origins and idle gaps ----
+  let driveSec = 0, distMi = 0, curId = null, tSec0 = 0, tMi0 = 0;
+  legs.forEach((l, i) => {
     l.cumDur = driveSec; driveSec += l.dur;
     // Prefix distances, so "average speed from the start to here" is a lookup
     // rather than an accumulation. It must NOT be accumulated per frame: seeking
@@ -1112,6 +1166,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=59"></script>
+<script src="assets/nav.js?v=60"></script>
 </body>
 </html>
