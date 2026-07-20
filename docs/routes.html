@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 356 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=62">
+<link rel="stylesheet" href="assets/style.css?v=63">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -88,7 +88,7 @@
   <footer class="site">Data: docs/data/routes.json, re-extracted directly from the raw GPX tracker logs and
   matched to trip times. Map tiles © OpenStreetMap contributors.</footer>
 </main>
-<script src="assets/site.js?v=62"></script>
+<script src="assets/site.js?v=63"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 <script>
 let DATA, map, layer, mode = 'seg', isolated = null, lastFeatureClick = 0;
@@ -926,7 +926,9 @@ function render(fit) {
   legend();
 }
 
-getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema changes (added per-point times)
+getJSON('data/routes.json?v=28').then(d => {   // ?v bumped whenever the DATA changes, not just its schema — a stale cache of a
+  // privacy-scrubbed file is the one that matters, and v27 kept serving the
+  // pre-scrub geometry to every returning visitor until this was noticed.
   DATA = d;
   const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const cov = d.coverage;
@@ -1180,6 +1182,6 @@ getJSON('data/routes.json?v=27').then(d => {   // ?v bumped when the data schema
   render(true);
 }).catch(dataFail('the route data'));
 </script>
-<script src="assets/nav.js?v=62"></script>
+<script src="assets/nav.js?v=63"></script>
 </body>
 </html>

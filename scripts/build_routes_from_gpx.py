@@ -10,7 +10,7 @@ positional trip_id join (GPS weeks align 1:1 with the dashboard's var W).
 
 Trips whose GPX window has no points are flagged no_gps.
 """
-import json, glob, re, os, bisect, math
+import json, glob, re, os, bisect, math, hashlib
 from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
 
@@ -113,6 +113,63 @@ def time_props(seg3):
 # no start point survives; legs shorter than that are dropped outright.
 HEAD_TRIM_M = 500.0
 
+# The per-leg clip above is necessary but NOT sufficient, which a review of the
+# published data proved rather than predicted. Two ways it leaked:
+#
+#  1. It only ever ran on the EN-ROUTE leg. When the first pickup of a day was
+#     inside the clip radius, trim_head returned [] and the leg was dropped —
+#     but the paired TRIP leg was published untouched, starting at that pickup.
+#     Seven days published a first point 129-410 m from one common centre.
+#
+#  2. A CONSTANT radius leaves a ring, not a scatter. Fourteen more days put
+#     their first point 292-1124 m from a second centre; a circle fitted to a
+#     ring recovers its centre far better than the radius suggests.
+#
+# So: exclude a disc around every habitual origin from ALL published geometry,
+# with a radius that varies per day so the residual is an annulus. The radius is
+# derived from the date, not random, so a rebuild reproduces byte-identical
+# output instead of silently reshuffling what is published.
+TRIM_MIN_M, TRIM_MAX_M = 500.0, 1500.0
+ORIGIN_CLUSTER_M = 1500.0        # day-origins closer than this are the same place
+
+def day_radius(day):
+    h = int(hashlib.sha256(day.encode()).hexdigest()[:8], 16)
+    return TRIM_MIN_M + (h % 10007) / 10007.0 * (TRIM_MAX_M - TRIM_MIN_M)
+
+def habitual_origins(day_origin):
+    """Greedy-cluster the raw first position of each day; return cluster centres."""
+    clusters = []
+    for day in sorted(day_origin):
+        p = day_origin[day]
+        for cl in clusters:
+            if metres(cl['c'], p) < ORIGIN_CLUSTER_M:
+                cl['pts'].append(p)
+                cl['c'] = (sum(q[0] for q in cl['pts']) / len(cl['pts']),
+                           sum(q[1] for q in cl['pts']) / len(cl['pts']))
+                break
+        else:
+            clusters.append({'c': (p[0], p[1]), 'pts': [p]})
+    return [cl['c'] for cl in clusters]
+
+def scrub_track(seg3, origins, radius):
+    """Drop points inside `radius` of any origin, keeping the longest surviving
+    contiguous run — dropping from the middle would otherwise splice two distant
+    stretches into one straight line across the excluded area."""
+    if not seg3:
+        return []
+    ok = [all(metres((p[0], p[1]), o) >= radius for o in origins) for p in seg3]
+    best_i = best_n = cur_i = cur_n = 0
+    for i, good in enumerate(ok):
+        if good:
+            if cur_n == 0:
+                cur_i = i
+            cur_n += 1
+            if cur_n > best_n:
+                best_i, best_n = cur_i, cur_n
+        else:
+            cur_n = 0
+    return seg3[best_i:best_i + best_n] if best_n >= 2 else []
+
 def metres(a, b):
     p1, p2 = math.radians(a[0]), math.radians(b[0])
     x = (math.sin((p2 - p1) / 2) ** 2
@@ -167,6 +224,8 @@ def main():
     mfiles = {re.search(r'week_(\d{8})', f).group(1): f
               for f in glob.glob(BASE + '/uber_screen/reports/metrics/week_*.json')}
 
+    day_origin = {}              # day -> raw (lat,lon,epoch) of that day's first fix
+    pending = []                 # trips held until the origins are known
     days = {}                    # day -> list of GeoJSON features
     tracks_by_id = {}            # trip_id -> {'enroute':[[lat,lon]...],'trip':[...]}
     week_cov = {}                # weekkey -> {label, trips, gps}
@@ -202,8 +261,16 @@ def main():
             tid = t.get('trip_id')
             ts = t.get('timestamps') or {}
             acc, pick, drop = ttime(ts.get('accept')), ttime(ts.get('pickup')), ttime(ts.get('dropoff'))
-            enr = trim_head(rdp_t(slice_track(pts, keys, acc, pick)))   # (lat,lon,ep) triples
+            enr_raw = rdp_t(slice_track(pts, keys, acc, pick))          # (lat,lon,ep) triples
             trp = rdp_t(slice_track(pts, keys, pick, drop))
+            # The day's true first position, recorded BEFORE any clipping —
+            # this is what the exclusion discs are centred on later.
+            first_raw = enr_raw[0] if enr_raw else (trp[0] if trp else None)
+            if first_raw and tid:
+                d0 = tid[:8]
+                if d0 not in day_origin or first_raw[2] < day_origin[d0][2]:
+                    day_origin[d0] = first_raw
+            enr = trim_head(enr_raw)
             has = len(trp) >= 2 or len(enr) >= 2
             met = t.get('metrics') or {}
             svc = (t.get('service') or '').upper() or None
@@ -232,22 +299,61 @@ def main():
                 'to': info.get('to', ''),
             }
             if has:
-                gps += 1; wg += 1
-                # dashboard keeps position-only [lat,lon] (no per-point time — it
-                # doesn't animate); routes.json carries the timing for playback.
-                tracks_by_id[tid] = {'enroute': [[a, b] for a, b, _ in enr],
-                                     'trip': [[a, b] for a, b, _ in trp]}
-                day = tid[:8]
-                fc = days.setdefault(day, [])
-                if len(enr) >= 2:
-                    fc.append({'type': 'Feature',
-                               'geometry': {'type': 'LineString', 'coordinates': [[b, a] for a, b, _ in enr]},
-                               'properties': dict(props_common, seg='enroute', **time_props(enr))})
-                if len(trp) >= 2:
-                    fc.append({'type': 'Feature',
-                               'geometry': {'type': 'LineString', 'coordinates': [[b, a] for a, b, _ in trp]},
-                               'properties': dict(props_common, seg='trip', **time_props(trp))})
-        week_cov[wk] = {'label': label, 'trips': len(wtrips), 'gps': wg}
+                # Held, not emitted. The exclusion discs are centred on habitual
+                # origins, which are only known once EVERY day has been read, so
+                # nothing can be published until the whole pass is done.
+                pending.append({'wk': wk, 'tid': tid, 'props': props_common,
+                                'enr': enr, 'trp': trp})
+        week_cov[wk] = {'label': label, 'trips': len(wtrips), 'gps': 0}
+
+    # ---- privacy pass: exclude a varying disc around every habitual origin ----
+    origins = habitual_origins(day_origin)
+    print(f'habitual origins: {len(origins)} from {len(day_origin)} tracked days')
+    dropped_legs = 0
+    for it in pending:
+        day = it['tid'][:8]
+        r = day_radius(day)
+        enr = scrub_track(it['enr'], origins, r)
+        trp = scrub_track(it['trp'], origins, r)
+        dropped_legs += (len(it['enr']) >= 2 and len(enr) < 2) + (len(it['trp']) >= 2 and len(trp) < 2)
+        if len(enr) < 2 and len(trp) < 2:
+            continue
+        gps += 1
+        week_cov[it['wk']]['gps'] += 1
+        # dashboard keeps position-only [lat,lon] (no per-point time — it
+        # doesn't animate); routes.json carries the timing for playback.
+        tracks_by_id[it['tid']] = {'enroute': [[a, b] for a, b, _ in enr],
+                                   'trip': [[a, b] for a, b, _ in trp]}
+        fc = days.setdefault(day, [])
+        if len(enr) >= 2:
+            fc.append({'type': 'Feature',
+                       'geometry': {'type': 'LineString', 'coordinates': [[b, a] for a, b, _ in enr]},
+                       'properties': dict(it['props'], seg='enroute', **time_props(enr))})
+        if len(trp) >= 2:
+            fc.append({'type': 'Feature',
+                       'geometry': {'type': 'LineString', 'coordinates': [[b, a] for a, b, _ in trp]},
+                       'properties': dict(it['props'], seg='trip', **time_props(trp))})
+    print(f'privacy pass: {dropped_legs} legs clipped away entirely')
+
+    # Self-check, printed as distances only — never coordinates. The guarantee is
+    # that no published point survives inside its day's exclusion radius of any
+    # habitual origin. This is the assertion the earlier per-leg trim could not
+    # make, and the one a review found it silently breaking.
+    worst = None
+    for day, fc in days.items():
+        r = day_radius(day)
+        for f in fc:
+            for lon, lat in f['geometry']['coordinates']:
+                d = min(metres((lat, lon), o) for o in origins)
+                if worst is None or d - r < worst[0]:
+                    worst = (d - r, d, r)
+    if worst:
+        slack, d, r = worst
+        ok = 'OK' if slack >= -1.0 else 'BREACH'
+        print(f'privacy check: {ok} - closest published point sits {d:.0f} m from the '
+              f'nearest habitual origin, against a {r:.0f} m exclusion for that day '
+              f'(margin {slack:+.0f} m)')
+        print(f'exclusion radii range {TRIM_MIN_M:.0f}-{TRIM_MAX_M:.0f} m, varying by day')
 
     # routes.json for routes.html
     routes = {
