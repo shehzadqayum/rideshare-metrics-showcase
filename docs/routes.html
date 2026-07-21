@@ -6,7 +6,7 @@
 <meta name="description" content="Every GPS-tracked London journey on one map - 340 trips across 31 days, filterable by day and colourable by segment type, earnings per mile or service.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%97%3C/text%3E%3C/svg%3E">
 <title>Routes covered — ride-share metrics</title>
-<link rel="stylesheet" href="assets/style.css?v=70">
+<link rel="stylesheet" href="assets/style.css?v=72">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
 </head>
 <body>
@@ -653,14 +653,24 @@ function pbFrameRender() {
 // or the unpaid drive to the pickup — the distinction the whole site turns on.
 // Say it where the eye already is (the on-map gauge, which is aria-hidden) and,
 // for that reason, also in the text readout that screen readers do announce.
-function pbSetPhase(kind) {   // 'trip' | 'enroute' | 'wait'
+const PB_PHASES = ['trip', 'enroute', 'deadhead', 'wait'];
+// Pale tints of each phase colour. Set as an inline background (the CSS
+// transition on .rs-gauge still animates the change) rather than a class: the
+// gauge's own base background otherwise wins, and inline is unambiguous. Kept
+// pale so the saturated speed arc still reads on top; the label names the phase
+// in black, so meaning never rests on colour alone.
+const PB_PH_BG = { trip: 'rgba(224,241,227,.96)', enroute: 'rgba(233,231,225,.96)',
+                   deadhead: 'rgba(248,228,225,.96)', wait: 'rgba(247,239,221,.96)' };
+function pbSetPhase(kind) {   // 'trip' | 'enroute' | 'deadhead' | 'wait'
   if (!gauge || !gauge.seg) return;
-  gauge.seg.classList.remove('trip', 'enroute', 'wait');
+  gauge.seg.classList.remove(...PB_PHASES);
   gauge.seg.classList.add(kind);
+  gauge.box.style.background = PB_PH_BG[kind];
   gauge.segLbl.innerHTML =
-    kind === 'trip'    ? 'On trip<span class="lg"> · paid</span>' :
-    kind === 'enroute' ? 'En route<span class="lg"> · unpaid</span>' :
-                         'Waiting<span class="lg"> · between jobs</span>';
+    kind === 'trip'     ? 'On trip<span class="lg"> · paid</span>' :
+    kind === 'enroute'  ? 'En route<span class="lg"> · unpaid</span>' :
+    kind === 'deadhead' ? 'Deadhead<span class="lg"> · unpaid</span>' :
+                          'Waiting<span class="lg"> · parked</span>';
 }
 function pbReadout(leg) {
   let done = 0, gbp = 0;
@@ -717,9 +727,20 @@ function pbNextDay() {
     pbPlay();
   }, CONT_HOLD);
 }
-function pbFlashIdle(gapSec) {
-  pbEls.read.innerHTML = `<span style="color:var(--warn)">⏭ waited ${Math.round(gapSec / 60)} min for the next job</span>`;
-  pbSetPhase('wait');
+function pbFlashGap(gapSec, movedMi) {
+  // The unpaid time between jobs is one of two things. If the car clearly moved,
+  // it was DEADHEAD — driving to reach the next job — which the map cannot draw
+  // because that stretch is not inside any trip's GPS window. If it barely moved,
+  // it was a genuine WAIT. The 1.5-mi floor clears the ~0.8 mi that endpoint
+  // privacy-clipping alone can open between two consecutive legs.
+  if (movedMi > 1.5) {
+    pbSetPhase('deadhead');
+    pbEls.read.innerHTML = `<span style="color:var(--serious)">⏭ deadhead · drove ~${Math.round(movedMi)} mi to the next job</span>`
+      + ` <span style="color:var(--muted)">(between-trip repositioning, not GPS-tracked)</span>`;
+  } else {
+    pbSetPhase('wait');
+    pbEls.read.innerHTML = `<span style="color:var(--warn)">⏭ waited ${Math.round(gapSec / 60)} min for the next job</span>`;
+  }
 }
 function pbTick(ts) {
   if (!pb || !pb.playing) return;
@@ -739,20 +760,22 @@ function pbTick(ts) {
       if (contPlay) pbNextDay();
       return;
     }
-    if (pb.legs[pb.li].gap > 0) {             // hybrid: skip the wait, flash it, jump the car
+    if (pb.legs[pb.li].gap > 0) {             // hybrid: skip the gap, flash it, jump the car
       pbFrameRender();                        // lay down the leg just finished
       pb.idleUntil = ts + 1200; pb.last = null;
-      const nxt = pb.legs[pb.li];
+      const prev = pb.legs[pb.li - 1], nxt = pb.legs[pb.li];
+      // How far the car actually moved across the gap decides deadhead vs wait.
+      const moved = prev ? hmiles(prev.pts[prev.pts.length - 1], nxt.pts[0]) : 0;
       pb.marker.setLatLng(nxt.pts[0]); pb.halo.setLatLng(nxt.pts[0]);
-      pbFollowTo(nxt.pts[0]);           // the car teleports across the wait; follow it
+      pbFollowTo(nxt.pts[0]);           // the car jumps across the gap; follow it
       // Nothing renders during the flash, so without this the gauge would hold
-      // stale values while the clock visibly jumps — the car is parked, and the
-      // time shown must be when the next job actually starts.
+      // stale values while the clock visibly jumps — the car is not on a leg, and
+      // the time shown must be when the next job actually starts.
       pb.spd = 0;
-      // Parked between jobs: the next trip has not begun, so it has no average
-      // yet — only the shift carries through the wait.
+      // Between jobs the next trip has not begun, so it has no average yet — only
+      // the shift carries through.
       pbGaugeUpdate(0, null, nxt.cumDur > 60 ? nxt.cumMi / (nxt.cumDur / 3600) : null, nxt.abs);
-      pbFlashIdle(nxt.gap); pb.raf = requestAnimationFrame(pbTick); return;
+      pbFlashGap(nxt.gap, moved); pb.raf = requestAnimationFrame(pbTick); return;
     }
   }
   pbFrameRender();

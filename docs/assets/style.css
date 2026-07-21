@@ -274,7 +274,7 @@ body.rs-maxi-lock { overflow:hidden; }
 /* transition matches the drawer's, so the gauge rides up with it rather than
    jumping once the panel has finished opening */
 .rs-gauge { position:absolute; left:10px; bottom:calc(var(--rsov-b, 0px) + 10px);
-  transition:bottom .22s ease;
+  transition:bottom .22s ease, background .25s ease;
   z-index:900; display:none; pointer-events:none; width:150px; padding:8px 10px 9px;
   background:#f7f4ee; background:rgba(247,244,238,.94);
   -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
@@ -284,17 +284,18 @@ body.rs-maxi-lock { overflow:hidden; }
 .rs-gauge.on { display:block; }
 /* no room left above an open drawer on a short screen — see lift() in site.js */
 .rs-squeeze .rs-gauge.on { display:none; }
-/* Current-segment indicator: paid trip vs the unpaid drive to the pickup. Word +
-   colour + dot shape (solid vs hollow ring), so it never rests on colour alone.
-   The panel is always light-pinned, so these literals are safe in either scheme. */
+/* Current-phase indicator. The whole panel washes to a pale tint of the phase
+   colour (paid trip / unpaid approach / deadhead / parked) — set as an inline
+   background from pbSetPhase, animated by the transition above — which reads at
+   a glance without looking away from the car. The label names it in black so the
+   meaning never rests on colour alone, and the tints stay pale so the saturated
+   speed arc still carries on top. */
 .rs-gauge .seg { display:flex; align-items:center; gap:6px; margin:0 0 6px;
-  font-size:.66rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+  font-size:.66rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:#16202a; }
 .rs-gauge .seg .dot { width:9px; height:9px; border-radius:50%; flex:0 0 auto; box-sizing:border-box; }
-.rs-gauge .seg.trip { color:#15803d; }
 .rs-gauge .seg.trip .dot { background:#15803d; }
-.rs-gauge .seg.enroute { color:#5f5850; }
-.rs-gauge .seg.enroute .dot { background:transparent; border:2px solid #8a8a85; }
-.rs-gauge .seg.wait { color:#8a6100; }
+.rs-gauge .seg.enroute .dot { background:transparent; border:2px solid #7a7a74; }
+.rs-gauge .seg.deadhead .dot { background:#d13d33; }
 .rs-gauge .seg.wait .dot { background:#c98500; }
 .rs-gauge svg { width:100%; height:auto; display:block; }
 .rs-gauge .mph { font-size:1.45rem; font-weight:650; font-variant-numeric:tabular-nums;
